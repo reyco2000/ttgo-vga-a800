@@ -14,6 +14,7 @@ int Atari_Init(Atari *a, const char *os, const char *basic) {
   a->joystick = 0xff;
   a->trigger = 1;
   a->rng = 0x19770825;
+  Atari_SetVideoStandard(a, A800_NTSC);
   a->pia[0] = a->pia[1] = a->pia[2] = a->pia[3] = 0xff;
   a->pokey[14] = a->pokey[15] = 0xff;
   if (AtariIo_LoadFile(os, a->os, sizeof(a->os)))
@@ -22,6 +23,18 @@ int Atari_Init(Atari *a, const char *os, const char *basic) {
     return -2;
   Atari_Reset(a);
   return 0;
+}
+void Atari_SetVideoStandard(Atari *a, AtariVideoStandard standard) {
+  a->video_standard = standard;
+  if (standard == A800_PAL) {
+    a->frame_lines = 312;
+    a->cpu_hz = 1773447u;
+    a->frame_rate = 49.8607597;
+  } else {
+    a->frame_lines = 262;
+    a->cpu_hz = 1789772u;
+    a->frame_rate = 59.9227434;
+  }
 }
 void Atari_Reset(Atari *a) {
   memset(a->antic, 0, sizeof(a->antic));
@@ -81,7 +94,7 @@ void Atari_Write(Atari *a, uint16_t p, uint8_t v) {
   a->ram[p] = v;
 }
 void Atari_Frame(Atari *a) {
-  for (a->scanline = 0; a->scanline < A800_HEIGHT; a->scanline++) {
+  for (a->scanline = 0; a->scanline < a->frame_lines; a->scanline++) {
     a->line_cycles = 0;
     if (a->scanline == 248) {
       a->antic[15] |= 0x40;

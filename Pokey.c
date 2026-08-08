@@ -48,7 +48,7 @@ void Pokey_Audio(Atari *a, int16_t *out, int count, int rate) {
     for (int ch = 0; ch < 4; ch++) {
       uint8_t ctl = a->pokey[ch * 2 + 1];
       int vol = ctl & 15;
-      double hz = (double)A800_CPU_HZ / (28.0 * ((int)a->pokey[ch * 2] + 1));
+      double hz = (double)a->cpu_hz / (28.0 * ((int)a->pokey[ch * 2] + 1));
       a->audio_phase[ch] += hz / rate;
       if (a->audio_phase[ch] >= 1.0)
         a->audio_phase[ch] -= 1.0;

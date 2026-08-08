@@ -1,6 +1,6 @@
 # a800
 
-`a800` is a small, readable Atari 800 XL (PAL) emulator in C. Its flat source
+`a800` is a small, readable Atari 800 XL (NTSC or PAL) emulator in C. Its flat source
 layout follows A8E (`6502.c`, `Antic.c`, `Gtia.c`, `Pokey.c`, `Pia.c`, and
 `AtariIo.c`), while the implementation is new code informed by Atari800's
 hardware organization and the Atari register model.
@@ -13,9 +13,11 @@ useful as a compact core to read and extend.
 - NMOS 6502 official instruction set, decimal mode, interrupts, and indirect
   JMP page-wrap behavior (unknown/illegal opcodes currently behave as NOPs)
 - 64 KiB XL address space, OS/BASIC/self-test overlays, and PORTB banking
-- PAL frame timing (312 lines, 114 CPU cycles per line), WSYNC and VBI NMI
+- selectable NTSC (default: 262 lines, 1.790 MHz, 59.92 Hz) or PAL (312
+  lines, 1.773 MHz, 49.86 Hz) timing, WSYNC, VCOUNT, GTIA PAL identification,
+  and VBI NMI
 - ANTIC display-list traversal and approximate text/bitmap mode rendering
-- GTIA color registers, console/trigger input, and a PAL-inspired palette
+- GTIA color registers, console/trigger input, and an Atari-inspired palette
 - PIA joystick and PORTB registers
 - POKEY keyboard, random register, basic timer IRQs, and four-channel square
   wave audio
@@ -56,6 +58,8 @@ Provide exact-size Atari XL ROM dumps (not included):
 
 ```sh
 ./build/a800
+./build/a800 --pal            # select PAL; NTSC is the default
+./build/a800 --ntsc           # explicitly select NTSC
 ./build/a800 -b
 ./build/a800 game.atr
 ./build/a800 --os path/to/ATARIXL.ROM --basic path/to/ATARIBAS.ROM
@@ -71,7 +75,7 @@ POKEY's keyboard registers.
 | File | Responsibility |
 | --- | --- |
 | `6502.c` | CPU execution and interrupts |
-| `Antic.c` | PAL frame timing and display-list renderer |
+| `Antic.c` | NTSC/PAL frame timing and display-list renderer |
 | `Gtia.c` | colors and console/trigger registers |
 | `Pokey.c` | keyboard, timers, random source, and audio |
 | `Pia.c` | joystick and XL memory-control ports |

@@ -6,18 +6,23 @@
 
 typedef struct Atari Atari;
 
-enum { A800_WIDTH = 384, A800_HEIGHT = 312, A800_CPU_HZ = 1773447 };
+enum { A800_WIDTH = 384, A800_MAX_HEIGHT = 312 };
+typedef enum { A800_NTSC = 0, A800_PAL = 1 } AtariVideoStandard;
 
 struct Atari {
   uint8_t ram[65536];
   uint8_t os[16384];
   uint8_t basic[8192];
   uint8_t antic[16], gtia[32], pokey[16], pia[4];
-  uint32_t pixels[A800_WIDTH * A800_HEIGHT];
+  uint32_t pixels[A800_WIDTH * A800_MAX_HEIGHT];
   uint16_t pc;
   uint8_t a, x, y, s, p;
   uint64_t cycles;
   int scanline, line_cycles;
+  AtariVideoStandard video_standard;
+  int frame_lines;
+  unsigned cpu_hz;
+  double frame_rate;
   int irq, nmi, stopped;
   uint8_t keycode, console, joystick, trigger;
   uint32_t rng;
@@ -28,6 +33,7 @@ struct Atari {
 };
 
 int Atari_Init(Atari *atari, const char *os_path, const char *basic_path);
+void Atari_SetVideoStandard(Atari *atari, AtariVideoStandard standard);
 void Atari_Reset(Atari *atari);
 void Atari_Frame(Atari *atari);
 void Atari_Destroy(Atari *atari);

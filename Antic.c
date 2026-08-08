@@ -30,7 +30,7 @@ static int rows_for(int mode) {
   return n[mode & 15];
 }
 static void span(Atari *a, int y, int x, int n, uint8_t c) {
-  if (y < 0 || y >= A800_HEIGHT)
+  if (y < 0 || y >= a->frame_lines)
     return;
   if (x < 0) {
     n += x;
@@ -78,9 +78,9 @@ static void draw_mode(Atari *a, int mode, int y, int row, uint16_t mem,
 void Antic_Frame(Atari *a) {
   uint16_t dl = (uint16_t)(a->antic[2] | a->antic[3] << 8), mem = 0;
   int y = 8, guard = 0;
-  for (int i = 0; i < A800_WIDTH * A800_HEIGHT; i++)
+  for (int i = 0; i < A800_WIDTH * a->frame_lines; i++)
     a->pixels[i] = Gtia_Color(a->gtia[26]);
-  while (y < A800_HEIGHT - 8 && guard++ < 1024) {
+  while (y < a->frame_lines - 8 && guard++ < 1024) {
     uint8_t ins = Atari_Read(a, dl++), mode = ins & 15;
     if (mode == 1) {
       uint16_t target = (uint16_t)(Atari_Read(a, dl) |
@@ -103,7 +103,7 @@ void Antic_Frame(Atari *a) {
       y += blank;
       continue;
     }
-    for (int r = 0; r < rows && y < A800_HEIGHT; r++, y++)
+    for (int r = 0; r < rows && y < a->frame_lines; r++, y++)
       draw_mode(a, mode, y, r, mem, width);
     mem = (uint16_t)(mem + (width == 3 ? 48 : width == 2 ? 40 : 32));
   }

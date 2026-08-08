@@ -1,6 +1,6 @@
 #include "Gtia.h"
 
-/* PAL-inspired YIQ approximation. Atari color values encode hue in the high
+/* Atari-inspired YIQ approximation. Atari color values encode hue in the high
  * nibble and luminance in the low nibble. */
 uint32_t Gtia_Color(uint8_t c) {
   static const int cs[16] = {100,  92,  71,  38,  0, -38, -71, -92,
@@ -33,7 +33,7 @@ uint8_t Gtia_Read(Atari *a, uint16_t address) {
   if (r >= 16 && r <= 19)
     return a->trigger;
   if (r == 20)
-    return 1; /* PAL */
+    return a->video_standard == A800_PAL ? 0x01 : 0x0f;
   if (r == 31)
     return a->console;
   return 0xff;

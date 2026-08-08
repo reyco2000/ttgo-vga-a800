@@ -24,5 +24,13 @@ int main(void) {
   Cpu_Reset(&a);
   assert(a.pc == 0x1234);
   assert(Gtia_Color(0) == 0xff0c0c0cu);
+  Atari_SetVideoStandard(&a, A800_NTSC);
+  assert(a.frame_lines == 262);
+  assert(a.cpu_hz == 1789772u);
+  assert(Gtia_Read(&a, 0xd014) == 0x0f);
+  Atari_SetVideoStandard(&a, A800_PAL);
+  assert(a.frame_lines == 312);
+  assert(a.cpu_hz == 1773447u);
+  assert(Gtia_Read(&a, 0xd014) == 0x01);
   return 0;
 }
