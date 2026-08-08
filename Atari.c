@@ -99,12 +99,12 @@ void Atari_Frame(Atari *a) {
   for (a->scanline = 0; a->scanline < a->frame_lines; a->scanline++) {
     a->line_cycles = 0;
     if (a->dli_lines[a->scanline]) {
-      a->antic[15] |= 0x80;
+      a->antic[15] = (uint8_t)((a->antic[15] & ~0x40) | 0x80);
       if (a->antic[14] & 0x80)
         a->nmi = 1;
     }
     if (a->scanline == 248) {
-      a->antic[15] |= 0x40;
+      a->antic[15] = (uint8_t)((a->antic[15] & ~0x80) | 0x40);
       if (a->antic[14] & 0x40)
         a->nmi = 1;
     }
@@ -113,6 +113,7 @@ void Atari_Frame(Atari *a) {
       a->line_cycles += n;
       Pokey_Advance(a, n);
     }
+    memcpy(a->line_gtia[a->scanline], a->gtia, sizeof(a->gtia));
     for (int i = 0; i < 4; i++)
       a->line_colors[a->scanline][i] = a->gtia[22 + i];
     a->line_colors[a->scanline][4] = a->gtia[26];

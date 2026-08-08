@@ -116,6 +116,39 @@ static void draw_mode(Atari *a, int mode, int y, int row, uint16_t mem,
     }
   }
 }
+static int pm_scale(uint8_t size) {
+  static const uint8_t scale[4] = {1, 2, 1, 4};
+  return scale[size & 3];
+}
+static void draw_pmg(Atari *a, int y) {
+  if (y < 8 || y >= 248)
+    return;
+  uint8_t *g = a->line_gtia[y];
+  int one = (a->antic[0] & 0x10) != 0;
+  uint16_t base = (uint16_t)((a->antic[7] & (one ? 0xf8 : 0xfc)) << 8);
+  unsigned row = (unsigned)(one ? y : y / 2);
+  if ((a->antic[0] & 8) && (g[29] & 2))
+    for (int p = 0; p < 4; p++) {
+      uint16_t off =
+          (uint16_t)(base + (one ? 0x400 + p * 0x100 : 0x200 + p * 0x80) + row);
+      uint8_t bits = Atari_Read(a, off);
+      int s = pm_scale(g[8 + p]), x = (g[p] - 0x22) * 2 + 4;
+      for (int b = 0; b < 8; b++)
+        if (bits & (128 >> b))
+          span(a, y, x + b * 2 * s, 2 * s, g[18 + p]);
+    }
+  if ((a->antic[0] & 4) && (g[29] & 1)) {
+    uint16_t off = (uint16_t)(base + (one ? 0x300 : 0x180) + row);
+    uint8_t bits = Atari_Read(a, off);
+    for (int m = 0; m < 4; m++) {
+      unsigned pair = (bits >> (m * 2)) & 3;
+      if (pair) {
+        int s = pm_scale(g[12] >> (m * 2)), x = (g[4 + m] - 0x22) * 2 + 4;
+        span(a, y, x, 4 * s, g[18 + m]);
+      }
+    }
+  }
+}
 void Antic_Frame(Atari *a) {
   uint16_t dl = (uint16_t)(a->antic[2] | a->antic[3] << 8), mem = 0;
   int y = 8, guard = 0;
@@ -148,4 +181,6 @@ void Antic_Frame(Atari *a) {
       draw_mode(a, mode, y, r, mem, width);
     mem = (uint16_t)(mem + line_bytes(mode, width));
   }
+  for (int line = 0; line < a->frame_lines; line++)
+    draw_pmg(a, line);
 }

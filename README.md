@@ -20,6 +20,7 @@ useful as a compact core to read and extend.
   double-width character modes, plus approximate bitmap-mode rendering
 - scanline DLI scheduling with per-line GTIA color capture
 - GTIA color registers, console/trigger input, and an Atari-inspired palette
+- basic player/missile DMA rendering with positions, sizes, and colors
 - PIA joystick and PORTB registers
 - POKEY keyboard, random register, basic timer IRQs, and four-channel square
   wave audio
