@@ -40,6 +40,10 @@ struct Atari {
   unsigned option_override;
   uint32_t rng;
   double audio_phase[4];
+  double audio_poly_phase, audio_previous, audio_filter;
+  uint32_t audio_poly4, audio_poly5, audio_poly9, audio_poly17;
+  uint8_t audio_output[4];
+  uint64_t pokey_timer_base;
   uint8_t *disk;
   size_t disk_size;
   int disk_readonly;

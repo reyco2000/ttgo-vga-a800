@@ -44,6 +44,11 @@ void Atari_Reset(Atari *a) {
   memset(a->pm_latch, 0, sizeof(a->pm_latch));
   memset(a->trigger_latch, 1, sizeof(a->trigger_latch));
   memset(a->pokey, 0, sizeof(a->pokey));
+  memset(a->audio_phase, 0, sizeof(a->audio_phase));
+  memset(a->audio_output, 0, sizeof(a->audio_output));
+  a->audio_poly_phase = a->audio_previous = a->audio_filter = 0;
+  a->audio_poly4 = a->audio_poly5 = a->audio_poly9 = a->audio_poly17 = 1;
+  a->pokey_timer_base = 0;
   a->pokey_irqen = a->pokey_skctl = 0;
   a->pokey_irqst = a->pokey_skstat = 0xff;
   Pia_Reset(a);

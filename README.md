@@ -26,8 +26,9 @@ useful as a compact core to read and extend.
   VDELAY, fifth-player and multicolor priority mixing, sticky collision
   latches, HITCLR, and latched joystick triggers
 - PIA joystick and PORTB registers
-- POKEY keyboard, random register, basic timer IRQs, and four-channel square
-  wave audio
+- POKEY keyboard and random register; AUDCTL-aware 15/64/1790 kHz and joined
+  timers; pure-tone, polynomial distortion/noise, high-pass, and volume-only
+  audio with DC filtering
 - read-only ATR parsing, sector access, and an XL OS SIOV acceleration for
   disk status and reads
 - segmented XEX loading with ordered INITAD execution and RUNAD handoff after
@@ -37,8 +38,10 @@ useful as a compact core to read and extend.
 Important current limits: ANTIC/GTIA are scanline approximations rather than
 cycle-exact; GTIA modes on character modes, precise scrolling fetch windows,
 serial SIO command transport at the POKEY bit level, cartridges, save states,
-and undocumented CPU instructions are not implemented. The SIOV acceleration lets
-the stock XL OS boot compatible ATR images without bit-level serial emulation.
+and undocumented CPU instructions are not implemented. POKEY linked-low timer
+pulses, exact high-pass flip-flops, nonlinear DAC mixing, and sub-frame audio
+register changes remain approximations. The SIOV acceleration lets the stock
+XL OS boot compatible ATR images without bit-level serial emulation.
 Display-list state, playfield data, colors, character-base, player/missile
 data, and collisions now advance one scanline at a time. Register changes
 within a scanline are still approximated at its ending boundary.
@@ -53,7 +56,8 @@ small implementation:
    then extend GTIA modes 9, 10, and 11 from ANTIC mode F to modes 2/3.
 2. Improve CPU cycle counts (especially page crossings and DMA steals) and add
    the stable undocumented opcodes used by software.
-3. Refine POKEY AUDCTL, joined timers, noise, and timer start/IRQ timing.
+3. Refine POKEY linked-low counter pulses, polynomial phase, high-pass
+   flip-flops, nonlinear mixing, and sub-frame register-write timing.
 4. Model same-scanline player/missile repositioning and shift-register
    retrigger behavior only where software compatibility demonstrates a need.
 
@@ -131,7 +135,7 @@ remaining behavior without requiring additional source files.
 
 The build also produces `a800-validate`, a headless replacement for the small
 one-off boot and framebuffer probes used during development. It reports CPU,
-banking, ANTIC, GTIA, POKEY, and framebuffer state and can save the final frame
+banking, ANTIC, GTIA, POKEY audio/control registers, and framebuffer state and can save the final frame
 as a portable pixmap:
 
 ```sh

@@ -127,8 +127,11 @@ int main(int argc, char **argv) {
          a.gtia_collisions[9], a.gtia_collisions[10], a.gtia_collisions[11],
          a.gtia_collisions[12], a.gtia_collisions[13], a.gtia_collisions[14],
          a.gtia_collisions[15]);
-  printf("pokey irqen=%02x irqst=%02x skctl=%02x skstat=%02x\n", a.pokey_irqen,
-         a.pokey_irqst, a.pokey_skctl, a.pokey_skstat);
+  printf("pokey aud=%02x/%02x,%02x/%02x,%02x/%02x,%02x/%02x audctl=%02x "
+         "irqen=%02x irqst=%02x skctl=%02x skstat=%02x\n",
+         a.pokey[0], a.pokey[1], a.pokey[2], a.pokey[3], a.pokey[4], a.pokey[5],
+         a.pokey[6], a.pokey[7], a.pokey[8], a.pokey_irqen, a.pokey_irqst,
+         a.pokey_skctl, a.pokey_skstat);
   printf("framebuffer=%dx%d pixels_different_from_corner=%u media=%s\n",
          A800_WIDTH, a.frame_lines, different, media ? media : "none");
   if (output && write_ppm(&a, output)) {
