@@ -19,9 +19,10 @@ useful as a compact core to read and extend.
 - ANTIC display-list traversal, including monochrome, multicolor, and
   double-width character modes, plus approximate bitmap-mode rendering
 - scanline DLI scheduling with per-line GTIA color capture
-- GTIA color registers, console/trigger input, and an Atari-inspired palette
-- basic player/missile DMA rendering with positions, sizes, colors, sticky
-  playfield/player collision latches, and HITCLR
+- GTIA color registers, modes 9/10/11 for ANTIC mode F, console/trigger input,
+  and an Atari-inspired palette
+- basic player/missile DMA or direct-GRAF rendering with positions, sizes,
+  fifth-player colors, sticky playfield/player collision latches, and HITCLR
 - PIA joystick and PORTB registers
 - POKEY keyboard, random register, basic timer IRQs, and four-channel square
   wave audio
@@ -32,7 +33,8 @@ useful as a compact core to read and extend.
 - SDL2 video, audio, keyboard, joystick-key, and console-key frontend
 
 Important current limits: ANTIC/GTIA are scanline approximations rather than
-cycle-exact; player/missile priority mixing, scrolling, serial SIO command
+cycle-exact; full player/missile priority mixing, GTIA modes on character
+modes, VDELAY, scrolling, serial SIO command
 transport at the POKEY bit level, cartridges, save states, and undocumented
 CPU instructions are not implemented. The SIOV acceleration lets
 the stock XL OS boot compatible ATR images without bit-level serial emulation.
@@ -43,10 +45,12 @@ A focused comparison with Atari800, A8E, and the local hardware reference
 identified these next compatibility improvements while retaining the flat,
 small implementation:
 
-1. Apply GTIA PRIOR rules when mixing playfield and player/missile pixels.
+1. Apply the complete GTIA PRIOR truth table when mixing playfield and
+   player/missile pixels; include paired-player multicolor behavior.
 2. Add ANTIC HSCROL/VSCROL addressing and visible-window offsets.
-3. Decode GTIA modes 9, 10, and 11 on top of ANTIC mode F.
-4. Refine joined POKEY timers and timer start/IRQ timing.
+3. Extend GTIA modes 9, 10, and 11 from ANTIC mode F to character modes 2/3.
+4. Add GTIA VDELAY and trigger latching, then refine joined POKEY timers and
+   timer start/IRQ timing.
 
 Lower-priority subsystems such as cartridges, save states, and bit-level SIO
 should remain separate additions rather than enlarging the core preemptively.
@@ -88,8 +92,11 @@ Provide exact-size Atari XL ROM dumps (not included):
 
 Without `-b`, BASIC is disabled for normal boot. XEX startup performs the XL
 OS initialization needed by programs, transfers control while the CPU is still
-executing OS code, and disables the BASIC bank at handoff. BASIC code is not
-executed and `READY` is not displayed while launching a XEX.
+executing OS code, disables the BASIC bank at handoff, and temporarily holds
+OPTION for executables that invoke the XL warm-start path. During that launch
+window, a warm start with a RAM `DOSINI` hook transfers to the hook directly;
+this is a compact substitute for Atari800's virtual boot-device loader. BASIC
+code is not executed and `READY` is not displayed while launching a XEX.
 
 Controls: arrows are joystick directions, Left/Right Alt is fire, F2/F3/F4
 are OPTION/SELECT/START, F5 resets, and F8 is BREAK. Normal letter, number,

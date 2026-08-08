@@ -146,6 +146,14 @@ int Cpu_Step(Atari *m) {
     m->cycles += 6;
     return 6;
   }
+  if (m->pc == 0xe474 && m->option_override) {
+    uint16_t init = (uint16_t)(m->ram[0x0c] | m->ram[0x0d] << 8);
+    if (init && init < 0xc000) {
+      m->pc = init;
+      m->cycles += 3;
+      return 3;
+    }
+  }
   op = fetch(m);
   switch (op) {
   case 0x00:

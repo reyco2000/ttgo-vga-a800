@@ -116,11 +116,14 @@ int Atari_LoadExecutable(Atari *a, const char *path) {
   a->xex_size = (size_t)size;
   a->xex_pos = 0;
   a->xex_first = 0xffff;
+  a->ram[9] = 1;
+  a->ram[0x244] = 0;
   a->ram[0x2e0] = a->ram[0x2e1] = a->ram[0x2e2] = a->ram[0x2e3] = 0;
   a->pia_ddr[1] = 0xff;
   a->pia[1] |= 0x83;
   a->pia[3] |= 4;
   a->console |= 4;
+  a->option_override = 64;
   a->s = 0xff;
   a->p = 0x20;
   a->irq = a->nmi = 0;

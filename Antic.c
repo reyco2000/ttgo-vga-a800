@@ -84,6 +84,29 @@ static int line_bytes(int mode, int width) {
     return width == 3 ? 24 : width == 2 ? 20 : 16;
   return width == 3 ? 48 : width == 2 ? 40 : 32;
 }
+static void draw_gtia_mode(Atari *a, int y, int x, int b, uint8_t d,
+                           uint8_t prior, uint8_t bg, uint8_t pf[4]) {
+  uint8_t *g = a->line_gtia[y];
+  for (int k = 0; k < 2; k++) {
+    unsigned v = k ? (d & 15) : (d >> 4);
+    uint8_t color = bg, mask = 0;
+    if ((prior & 0xc0) == 0x40)
+      color = (uint8_t)(bg | v);       /* 16 luminances */
+    else if ((prior & 0xc0) == 0x80) { /* nine colors */
+      if (v < 4)
+        color = g[18 + v];
+      else if (v < 8) {
+        color = pf[v - 4];
+        mask = (uint8_t)(1 << (v - 4));
+      }
+    } else { /* 16 hues */
+      color = (uint8_t)(bg | (v << 4));
+      if (!v)
+        color &= 0xf0;
+    }
+    pfspan(a, y, x + b * 8 + k * 4, 4, color, mask);
+  }
+}
 static void draw_mode(Atari *a, int mode, int y, int row, uint16_t mem,
                       int width) {
   int bytes = line_bytes(mode, width), scale = (mode == 6 || mode == 7) ? 2 : 1,
@@ -94,7 +117,8 @@ static void draw_mode(Atari *a, int mode, int y, int row, uint16_t mem,
       x = (A800_WIDTH - bytes * pixels_per_byte) / 2;
   uint8_t bg = a->line_colors[y][4],
           pf[4] = {a->line_colors[y][0], a->line_colors[y][1],
-                   a->line_colors[y][2], a->line_colors[y][3]};
+                   a->line_colors[y][2], a->line_colors[y][3]},
+          prior = a->line_gtia[y][27];
   span(a, y, 0, A800_WIDTH, bg);
   for (int b = 0; b < bytes; b++) {
     uint8_t d = Atari_Read(a, (uint16_t)(mem + b));
@@ -156,7 +180,9 @@ static void draw_mode(Atari *a, int mode, int y, int row, uint16_t mem,
         pfspan(a, y, x + b * 8 + k * 2, 2, v ? pf[v - 1] : bg,
                v ? (uint8_t)(1 << (v - 1)) : 0);
       }
-    } else {
+    } else if (mode == 15 && (prior & 0xc0))
+      draw_gtia_mode(a, y, x, b, d, prior, bg, pf);
+    else {
       uint8_t paper = pf[2], ink = (uint8_t)((pf[2] & 0xf0) | (pf[1] & 0x0e));
       for (int k = 0; k < 8; k++)
         pfspan(a, y, x + b * 8 + k, 1, (d & (128 >> k)) ? ink : paper,
@@ -208,26 +234,31 @@ static void draw_pmg(Atari *a, int y) {
   int one = (a->antic[0] & 0x10) != 0;
   uint16_t base = (uint16_t)((a->antic[7] & (one ? 0xf8 : 0xfc)) << 8);
   unsigned row = (unsigned)(one ? y : y / 2);
-  if ((a->antic[0] & 8) && (g[29] & 2))
+  if (g[29] & 2)
     for (int p = 0; p < 4; p++) {
-      uint16_t off =
-          (uint16_t)(base + (one ? 0x400 + p * 0x100 : 0x200 + p * 0x80) + row);
-      uint8_t bits = Atari_Read(a, off);
+      uint8_t bits = g[13 + p];
+      if (a->antic[0] & 8) {
+        uint16_t off =
+            (uint16_t)(base + (one ? 0x400 + p * 0x100 : 0x200 + p * 0x80) +
+                       row);
+        bits = Atari_Read(a, off);
+      }
       int s = pm_scale(g[8 + p]), x = (g[p] - 0x22) * 2 + 4;
       for (int b = 0; b < 8; b++)
         if (bits & (128 >> b))
           player_pixel(a, y, x + b * 2 * s, 2 * s, p, g[18 + p]);
     }
-  if ((a->antic[0] & 4) && (g[29] & 1)) {
-    uint16_t off = (uint16_t)(base + (one ? 0x300 : 0x180) + row);
-    uint8_t bits = Atari_Read(a, off);
-    for (int m = 0; m < 4; m++) {
-      unsigned pair = (bits >> (m * 2)) & 3;
-      if (pair) {
-        int s = pm_scale(g[12] >> (m * 2)), x = (g[4 + m] - 0x22) * 2 + 4;
-        missile_pixel(a, y, x, 4 * s, m, g[18 + m]);
-      }
+  if (g[29] & 1) {
+    uint8_t bits = g[17];
+    if (a->antic[0] & 12) {
+      uint16_t off = (uint16_t)(base + (one ? 0x300 : 0x180) + row);
+      bits = Atari_Read(a, off);
     }
+    for (int m = 0; m < 4; m++)
+      if (bits & (2 << (m * 2))) {
+        int s = pm_scale(g[12] >> (m * 2)), x = (g[4 + m] - 0x22) * 2 + 4;
+        missile_pixel(a, y, x, 2 * s, m, (g[27] & 0x10) ? g[25] : g[18 + m]);
+      }
   }
 }
 void Antic_Frame(Atari *a) {

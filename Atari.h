@@ -32,6 +32,7 @@ struct Atari {
   double frame_rate;
   int irq, nmi, stopped;
   uint8_t keycode, console, joystick, trigger;
+  unsigned option_override;
   uint32_t rng;
   double audio_phase[4];
   uint8_t *disk;

@@ -34,8 +34,14 @@ uint8_t Gtia_Read(Atari *a, uint16_t address) {
     return a->trigger;
   if (r == 20)
     return a->video_standard == A800_PAL ? 0x01 : 0x0f;
-  if (r == 31)
-    return a->console;
+  if (r == 31) {
+    uint8_t c = a->console;
+    if (a->option_override) {
+      a->option_override--;
+      c &= (uint8_t)~4;
+    }
+    return c;
+  }
   return 0xff;
 }
 void Gtia_Write(Atari *a, uint16_t address, uint8_t value) {
