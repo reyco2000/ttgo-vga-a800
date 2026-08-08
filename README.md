@@ -1,7 +1,87 @@
-This project is a greatly simplified version of the atari800 emulator.
+# a800
 
-The structure is modeled after the A8E emulator.
+`a800` is a small, readable Atari 800 XL (PAL) emulator in C. Its flat source
+layout follows A8E (`6502.c`, `Antic.c`, `Gtia.c`, `Pokey.c`, `Pia.c`, and
+`AtariIo.c`), while the implementation is new code informed by Atari800's
+hardware organization and the Atari register model.
 
-The emulator only emulates the Atari 800 XL, not other Atari's.
+This is an early simplified emulator, not a replacement for Atari800. It is
+useful as a compact core to read and extend.
 
-The only interface supported is SDL2.
+## Implemented
+
+- NMOS 6502 official instruction set, decimal mode, interrupts, and indirect
+  JMP page-wrap behavior (unknown/illegal opcodes currently behave as NOPs)
+- 64 KiB XL address space, OS/BASIC/self-test overlays, and PORTB banking
+- PAL frame timing (312 lines, 114 CPU cycles per line), WSYNC and VBI NMI
+- ANTIC display-list traversal and approximate text/bitmap mode rendering
+- GTIA color registers, console/trigger input, and a PAL-inspired palette
+- PIA joystick and PORTB registers
+- POKEY keyboard, random register, basic timer IRQs, and four-channel square
+  wave audio
+- read-only ATR parsing and sector access in the core API
+- SDL2 video, audio, keyboard, joystick-key, and console-key frontend
+
+Important current limits: ANTIC/GTIA are scanline approximations rather than
+cycle-exact; player/missile graphics, collisions, scrolling, serial SIO command
+transport, cartridges, XEX loading, save states, and undocumented CPU
+instructions are not implemented. ATR images can be mounted and read through
+`Atari_Sector()`, but the emulated OS cannot boot them until POKEY serial/SIO
+command transport is added.
+
+## Build
+
+Requirements: a C99 compiler, CMake 3.16+, and SDL2 development files.
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
+For a headless core-only build, which needs no SDL:
+
+```sh
+cmake -S . -B build-core -DA800_BUILD_SDL=OFF
+cmake --build build-core
+ctest --test-dir build-core --output-on-failure
+```
+
+## Run
+
+Provide exact-size Atari XL ROM dumps (not included):
+
+- `ATARIXL.ROM` — 16 KiB
+- `ATARIBAS.ROM` — 8 KiB
+
+```sh
+./build/a800
+./build/a800 -b
+./build/a800 game.atr
+./build/a800 --os path/to/ATARIXL.ROM --basic path/to/ATARIBAS.ROM
+```
+
+Controls: arrows are joystick directions, Left/Right Alt is fire, F2/F3/F4
+are OPTION/SELECT/START, F5 resets, and F8 is BREAK. Normal letter, number,
+Return, Space, Backspace, Escape, Shift, and Control key input is mapped to
+POKEY's keyboard registers.
+
+## Source map
+
+| File | Responsibility |
+| --- | --- |
+| `6502.c` | CPU execution and interrupts |
+| `Antic.c` | PAL frame timing and display-list renderer |
+| `Gtia.c` | colors and console/trigger registers |
+| `Pokey.c` | keyboard, timers, random source, and audio |
+| `Pia.c` | joystick and XL memory-control ports |
+| `AtariIo.c` | ROM files and ATR sector layout |
+| `Atari.c` | machine wiring and memory map |
+| `A800.c` | SDL2 application |
+
+## Provenance
+
+The code in this directory was written for this simplified implementation; it
+does not copy A8E source. Atari800 (GPL-2.0-or-later) was used as an
+architectural and behavioral reference, especially its CPU, memory, ANTIC,
+GTIA, POKEY, and PIA module boundaries. See <https://atari800.github.io/>.

@@ -1,0 +1,7 @@
+#ifndef A800_ATARI_IO_H
+#define A800_ATARI_IO_H
+#include "Atari.h"
+int AtariIo_LoadFile(const char *path, uint8_t *destination, size_t expected);
+int AtariIo_LoadDisk(Atari *a, const char *path);
+int AtariIo_Sector(Atari *a, unsigned sector, uint8_t *data, int write);
+#endif
