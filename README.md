@@ -21,15 +21,15 @@ useful as a compact core to read and extend.
 - PIA joystick and PORTB registers
 - POKEY keyboard, random register, basic timer IRQs, and four-channel square
   wave audio
-- read-only ATR parsing and sector access in the core API
+- read-only ATR parsing, sector access, and an XL OS SIOV acceleration for
+  disk status and reads
 - SDL2 video, audio, keyboard, joystick-key, and console-key frontend
 
 Important current limits: ANTIC/GTIA are scanline approximations rather than
 cycle-exact; player/missile graphics, collisions, scrolling, serial SIO command
-transport, cartridges, XEX loading, save states, and undocumented CPU
-instructions are not implemented. ATR images can be mounted and read through
-`Atari_Sector()`, but the emulated OS cannot boot them until POKEY serial/SIO
-command transport is added.
+transport at the POKEY bit level, cartridges, XEX loading, save states, and
+undocumented CPU instructions are not implemented. The SIOV acceleration lets
+the stock XL OS boot compatible ATR images without bit-level serial emulation.
 
 ## Build
 

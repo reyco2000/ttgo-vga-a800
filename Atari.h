@@ -14,6 +14,8 @@ struct Atari {
   uint8_t os[16384];
   uint8_t basic[8192];
   uint8_t antic[16], gtia[32], pokey[16], pia[4];
+  uint8_t pia_ddr[2];
+  uint8_t pokey_irqen, pokey_irqst, pokey_skctl, pokey_skstat;
   uint32_t pixels[A800_WIDTH * A800_MAX_HEIGHT];
   uint16_t pc;
   uint8_t a, x, y, s, p;
@@ -37,6 +39,7 @@ void Atari_SetVideoStandard(Atari *atari, AtariVideoStandard standard);
 void Atari_Reset(Atari *atari);
 void Atari_Frame(Atari *atari);
 void Atari_Destroy(Atari *atari);
+uint8_t Atari_PortB(const Atari *atari);
 uint8_t Atari_Read(Atari *atari, uint16_t address);
 void Atari_Write(Atari *atari, uint16_t address, uint8_t value);
 int Atari_LoadDisk(Atari *atari, const char *path);

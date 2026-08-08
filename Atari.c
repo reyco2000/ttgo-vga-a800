@@ -15,8 +15,8 @@ int Atari_Init(Atari *a, const char *os, const char *basic) {
   a->trigger = 1;
   a->rng = 0x19770825;
   Atari_SetVideoStandard(a, A800_NTSC);
-  a->pia[0] = a->pia[1] = a->pia[2] = a->pia[3] = 0xff;
-  a->pokey[14] = a->pokey[15] = 0xff;
+  Pia_Reset(a);
+  a->pokey_irqst = a->pokey_skstat = 0xff;
   if (AtariIo_LoadFile(os, a->os, sizeof(a->os)))
     return -1;
   if (basic && AtariIo_LoadFile(basic, a->basic, sizeof(a->basic)))
@@ -40,14 +40,15 @@ void Atari_Reset(Atari *a) {
   memset(a->antic, 0, sizeof(a->antic));
   memset(a->gtia, 0, sizeof(a->gtia));
   memset(a->pokey, 0, sizeof(a->pokey));
-  a->pokey[14] = a->pokey[15] = 0xff;
-  a->pia[1] = 0xff;
+  a->pokey_irqen = a->pokey_skctl = 0;
+  a->pokey_irqst = a->pokey_skstat = 0xff;
+  Pia_Reset(a);
   a->cycles = 0;
   a->irq = a->nmi = 0;
   Cpu_Reset(a);
 }
 uint8_t Atari_Read(Atari *a, uint16_t p) {
-  uint8_t portb = a->pia[1];
+  uint8_t portb = Atari_PortB(a);
   if (p >= 0xd000 && p < 0xd800) {
     switch ((p >> 8) & 7) {
     case 0:
@@ -88,7 +89,7 @@ void Atari_Write(Atari *a, uint16_t p, uint8_t v) {
     }
     return;
   }
-  uint8_t pb = a->pia[1];
+  uint8_t pb = Atari_PortB(a);
   if ((p >= 0xc000 && (pb & 1)) || (p >= 0xa000 && p < 0xc000 && !(pb & 2)))
     return;
   a->ram[p] = v;

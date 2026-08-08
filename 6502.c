@@ -2,6 +2,7 @@
  * indirect page-wrap quirk are implemented; undocumented opcodes act as NOPs.
  */
 #include "6502.h"
+#include "AtariIo.h"
 
 enum { C = 1, Z = 2, I = 4, D = 8, B = 16, U = 32, V = 64, N = 128 };
 
@@ -131,6 +132,15 @@ int Cpu_Step(Atari *m) {
   }
   if (m->stopped)
     return 1;
+  if (m->pc == 0xe459 && (Atari_PortB(m) & 1)) {
+    m->y = AtariIo_Sio(m);
+    nz(m, m->y);
+    m->pc = pull(m);
+    m->pc |= (uint16_t)pull(m) << 8;
+    m->pc++;
+    m->cycles += 6;
+    return 6;
+  }
   op = fetch(m);
   switch (op) {
   case 0x00:

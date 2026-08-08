@@ -60,6 +60,31 @@ int AtariIo_Sector(Atari *a, unsigned sector, uint8_t *data, int write) {
     memcpy(data, a->disk + off, len);
   return (int)len;
 }
+uint8_t AtariIo_Sio(Atari *a) {
+  uint8_t command = a->ram[0x302];
+  uint16_t buffer = (uint16_t)(a->ram[0x304] | a->ram[0x305] << 8);
+  unsigned sector = (unsigned)(a->ram[0x30a] | a->ram[0x30b] << 8);
+  uint8_t data[256];
+  int n = -1;
+  if (a->ram[0x300] == 0x31 && a->ram[0x301] == 1) {
+    if (command == 0x52) {
+      n = AtariIo_Sector(a, sector, data, 0);
+      if (n > 0)
+        for (int i = 0; i < n; i++)
+          Atari_Write(a, (uint16_t)(buffer + i), data[i]);
+    } else if (command == 0x53 && a->disk) {
+      data[0] = 0x10;
+      data[1] = 0xff;
+      data[2] = 0xe0;
+      data[3] = 0;
+      for (int i = 0; i < 4; i++)
+        Atari_Write(a, (uint16_t)(buffer + i), data[i]);
+      n = 4;
+    }
+  }
+  a->ram[0x303] = (uint8_t)(n > 0 ? 1 : 0x8a);
+  return a->ram[0x303];
+}
 int Atari_LoadDisk(Atari *a, const char *path) {
   return AtariIo_LoadDisk(a, path);
 }

@@ -70,8 +70,9 @@ static void input(Atari *a, const SDL_Event *e, int down) {
     return;
   }
   if (k == SDLK_F8 && down) {
-    a->pokey[14] &= 0x7f;
-    a->irq = 1;
+    a->pokey_irqst &= 0x7f;
+    if (a->pokey_irqen & 0x80)
+      a->irq = 1;
     return;
   }
   uint8_t c = keycode(k);
@@ -82,11 +83,12 @@ static void input(Atari *a, const SDL_Event *e, int down) {
       c |= 0x80;
     a->keycode = c;
     if (down) {
-      a->pokey[15] &= ~4;
-      a->pokey[14] &= ~0x40;
-      a->irq = 1;
+      a->pokey_skstat &= ~4;
+      a->pokey_irqst &= ~0x40;
+      if (a->pokey_irqen & 0x40)
+        a->irq = 1;
     } else
-      a->pokey[15] |= 4;
+      a->pokey_skstat |= 4;
   }
 }
 int main(int argc, char **argv) {
@@ -116,7 +118,7 @@ int main(int argc, char **argv) {
   }
   Atari_SetVideoStandard(&a, standard);
   if (!use_basic)
-    a.pia[1] |= 2;
+    a.console &= (uint8_t)~4;
   if (disk && Atari_LoadDisk(&a, disk))
     fprintf(stderr, "a800: warning: cannot mount %s\n", disk);
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_EVENTS)) {
