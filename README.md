@@ -18,18 +18,21 @@ useful as a compact core to read and extend.
   and VBI NMI
 - ANTIC display-list traversal, including monochrome, multicolor, and
   double-width character modes, plus approximate bitmap-mode rendering
+- scanline DLI scheduling with per-line GTIA color capture
 - GTIA color registers, console/trigger input, and an Atari-inspired palette
 - PIA joystick and PORTB registers
 - POKEY keyboard, random register, basic timer IRQs, and four-channel square
   wave audio
 - read-only ATR parsing, sector access, and an XL OS SIOV acceleration for
   disk status and reads
+- segmented XEX loading with ordered INITAD execution and RUNAD handoff after
+  OS startup
 - SDL2 video, audio, keyboard, joystick-key, and console-key frontend
 
 Important current limits: ANTIC/GTIA are scanline approximations rather than
 cycle-exact; player/missile graphics, collisions, scrolling, serial SIO command
-transport at the POKEY bit level, cartridges, XEX loading, save states, and
-undocumented CPU instructions are not implemented. The SIOV acceleration lets
+  transport at the POKEY bit level, cartridges, save states, and undocumented
+CPU instructions are not implemented. The SIOV acceleration lets
 the stock XL OS boot compatible ATR images without bit-level serial emulation.
 
 ## Build
@@ -63,13 +66,14 @@ Provide exact-size Atari XL ROM dumps (not included):
 ./build/a800 --ntsc           # explicitly select NTSC
 ./build/a800 -b
 ./build/a800 game.atr
+./build/a800 program.xex
 ./build/a800 --os path/to/ATARIXL.ROM --basic path/to/ATARIBAS.ROM
 ```
 
 Controls: arrows are joystick directions, Left/Right Alt is fire, F2/F3/F4
 are OPTION/SELECT/START, F5 resets, and F8 is BREAK. Normal letter, number,
-Return, Space, Backspace, Escape, Shift, and Control key input is mapped to
-POKEY's keyboard registers.
+punctuation, Return, Space, Backspace, Escape, Tab, Shift, and Control input is
+mapped to the Atari keyboard matrix and POKEY registers.
 
 ## Source map
 

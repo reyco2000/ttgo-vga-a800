@@ -141,6 +141,11 @@ int Cpu_Step(Atari *m) {
     m->cycles += 6;
     return 6;
   }
+  if (m->pc == 0xd5ff && m->xex_data) {
+    AtariIo_XexContinue(m);
+    m->cycles += 6;
+    return 6;
+  }
   op = fetch(m);
   switch (op) {
   case 0x00:

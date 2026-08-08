@@ -66,6 +66,7 @@ int main(void) {
   a.antic[3] = 0x02;
   a.antic[9] = 0xe0;
   a.gtia[23] = 0x4a;
+  a.line_colors[8][1] = 0x4a;
   a.ram[0x200] = 0x47;
   a.ram[0x201] = 0x00;
   a.ram[0x202] = 0x03;
@@ -76,5 +77,14 @@ int main(void) {
   a.ram[0xe000] = 0x80;
   Antic_Frame(&a);
   assert(a.pixels[8 * A800_WIDTH + 32] == Gtia_Color(0x4a));
+  memset(a.ram, 0, sizeof(a.ram));
+  a.antic[2] = 0;
+  a.antic[3] = 2;
+  a.ram[0x200] = 0xf0;
+  a.ram[0x201] = 0x41;
+  a.ram[0x202] = 0;
+  a.ram[0x203] = 2;
+  Antic_ScheduleDlis(&a);
+  assert(a.dli_lines[15]);
   return 0;
 }

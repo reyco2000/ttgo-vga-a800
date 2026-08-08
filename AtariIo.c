@@ -91,3 +91,79 @@ int Atari_LoadDisk(Atari *a, const char *path) {
 int Atari_Sector(Atari *a, unsigned s, uint8_t *d, int w) {
   return AtariIo_Sector(a, s, d, w);
 }
+int Atari_LoadExecutable(Atari *a, const char *path) {
+  FILE *f = fopen(path, "rb");
+  long size;
+  if (!f)
+    return -1;
+  if (fseek(f, 0, SEEK_END) || (size = ftell(f)) < 6 || fseek(f, 0, SEEK_SET)) {
+    fclose(f);
+    return -1;
+  }
+  free(a->xex_data);
+  a->xex_data = (uint8_t *)malloc((size_t)size);
+  if (!a->xex_data) {
+    fclose(f);
+    return -1;
+  }
+  if (fread(a->xex_data, 1, (size_t)size, f) != (size_t)size) {
+    free(a->xex_data);
+    a->xex_data = NULL;
+    fclose(f);
+    return -1;
+  }
+  fclose(f);
+  a->xex_size = (size_t)size;
+  a->xex_pos = 0;
+  a->xex_first = 0xffff;
+  a->ram[0x2e0] = a->ram[0x2e1] = a->ram[0x2e2] = a->ram[0x2e3] = 0;
+  a->pia_ddr[1] = 0xff;
+  a->pia[1] |= 0x83;
+  a->pia[3] |= 4;
+  a->console |= 4;
+  a->s = 0xff;
+  a->p = 0x20;
+  a->irq = a->nmi = 0;
+  AtariIo_XexContinue(a);
+  return a->xex_data || a->pc ? 0 : -1;
+}
+void AtariIo_XexContinue(Atari *a) {
+  while (a->xex_data) {
+    while (a->xex_pos + 1 < a->xex_size && a->xex_data[a->xex_pos] == 0xff &&
+           a->xex_data[a->xex_pos + 1] == 0xff)
+      a->xex_pos += 2;
+    if (a->xex_pos + 4 > a->xex_size)
+      break;
+    uint16_t start = (uint16_t)(a->xex_data[a->xex_pos] |
+                                a->xex_data[a->xex_pos + 1] << 8),
+             end = (uint16_t)(a->xex_data[a->xex_pos + 2] |
+                              a->xex_data[a->xex_pos + 3] << 8);
+    size_t count;
+    a->xex_pos += 4;
+    if (end < start ||
+        (count = (size_t)end - start + 1) > a->xex_size - a->xex_pos) {
+      a->xex_pos = a->xex_size;
+      break;
+    }
+    if (a->xex_first == 0xffff)
+      a->xex_first = start;
+    memcpy(a->ram + start, a->xex_data + a->xex_pos, count);
+    a->xex_pos += count;
+    uint16_t init = (uint16_t)(a->ram[0x2e2] | a->ram[0x2e3] << 8);
+    if (init) {
+      a->ram[0x2e2] = a->ram[0x2e3] = 0;
+      uint16_t ret = 0xd5fe;
+      a->ram[0x100 | a->s--] = (uint8_t)(ret >> 8);
+      a->ram[0x100 | a->s--] = (uint8_t)ret;
+      a->pc = init;
+      return;
+    }
+  }
+  uint16_t run = (uint16_t)(a->ram[0x2e0] | a->ram[0x2e1] << 8);
+  if (!run)
+    run = a->xex_first;
+  free(a->xex_data);
+  a->xex_data = NULL;
+  a->xex_size = a->xex_pos = 0;
+  a->pc = run;
+}

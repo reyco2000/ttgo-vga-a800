@@ -4,11 +4,21 @@
 #include <stdio.h>
 #include <string.h>
 
-static uint8_t keycode(SDL_Keycode k) {
+static uint8_t keycode(SDL_Keycode k, SDL_Keymod mod) {
+  static const uint8_t letters[26] = {0x3f, 0x15, 0x12, 0x3a, 0x2a, 0x38, 0x3d,
+                                      0x39, 0x0d, 0x01, 0x05, 0x00, 0x25, 0x23,
+                                      0x08, 0x0a, 0x2f, 0x28, 0x3e, 0x2d, 0x0b,
+                                      0x10, 0x2e, 0x16, 0x2b, 0x17};
+  static const uint8_t digits[10] = {0x32, 0x1f, 0x1e, 0x1a, 0x18,
+                                     0x1d, 0x1b, 0x33, 0x35, 0x30};
+  int shift = (mod & KMOD_SHIFT) != 0;
   if (k >= 'a' && k <= 'z')
-    return (uint8_t)(k - 'a' + 0x3f);
-  if (k >= '0' && k <= '9')
-    return (uint8_t)(k - '0' + 0x32);
+    return (uint8_t)(letters[k - 'a'] | (shift ? 0x40 : 0));
+  if (k >= '0' && k <= '9') {
+    static const uint8_t shifted[10] = {0x72, 0x5f, 0x75, 0x5a, 0x58,
+                                        0x5d, 0x47, 0x5b, 0x07, 0x70};
+    return shift ? shifted[k - '0'] : digits[k - '0'];
+  }
   switch (k) {
   case SDLK_SPACE:
     return 0x21;
@@ -18,6 +28,28 @@ static uint8_t keycode(SDL_Keycode k) {
     return 0x34;
   case SDLK_ESCAPE:
     return 0x1c;
+  case SDLK_TAB:
+    return shift ? 0x6c : 0x2c;
+  case SDLK_MINUS:
+    return shift ? 0x4e : 0x0e;
+  case SDLK_EQUALS:
+    return shift ? 0x06 : 0x0f;
+  case SDLK_LEFTBRACKET:
+    return 0x60;
+  case SDLK_RIGHTBRACKET:
+    return 0x62;
+  case SDLK_SEMICOLON:
+    return shift ? 0x42 : 0x02;
+  case SDLK_QUOTE:
+    return shift ? 0x5e : 0x73;
+  case SDLK_COMMA:
+    return shift ? 0x36 : 0x20;
+  case SDLK_PERIOD:
+    return shift ? 0x37 : 0x22;
+  case SDLK_SLASH:
+    return shift ? 0x66 : 0x26;
+  case SDLK_BACKSLASH:
+    return shift ? 0x4f : 0x46;
   default:
     return 0xff;
   }
@@ -75,10 +107,8 @@ static void input(Atari *a, const SDL_Event *e, int down) {
       a->irq = 1;
     return;
   }
-  uint8_t c = keycode(k);
+  uint8_t c = keycode(k, e->key.keysym.mod);
   if (c != 0xff) {
-    if (e->key.keysym.mod & KMOD_SHIFT)
-      c |= 0x40;
     if (e->key.keysym.mod & KMOD_CTRL)
       c |= 0x80;
     a->keycode = c;
@@ -92,7 +122,8 @@ static void input(Atari *a, const SDL_Event *e, int down) {
   }
 }
 int main(int argc, char **argv) {
-  const char *os = "ATARIXL.ROM", *basic = "ATARIBAS.ROM", *disk = NULL;
+  const char *os = "ATARIXL.ROM", *basic = "ATARIBAS.ROM", *media = NULL,
+             *xex = NULL;
   int use_basic = 0;
   AtariVideoStandard standard = A800_NTSC;
   for (int i = 1; i < argc; i++) {
@@ -107,7 +138,12 @@ int main(int argc, char **argv) {
     else if (!strcmp(argv[i], "--basic") && i + 1 < argc)
       basic = argv[++i];
     else
-      disk = argv[i];
+      media = argv[i];
+  }
+  if (media) {
+    size_t n = strlen(media);
+    if (n >= 4 && !SDL_strcasecmp(media + n - 4, ".xex"))
+      xex = media;
   }
   Atari a;
   int r = Atari_Init(&a, os, basic);
@@ -117,10 +153,10 @@ int main(int argc, char **argv) {
     return 1;
   }
   Atari_SetVideoStandard(&a, standard);
-  if (!use_basic)
+  if (!use_basic && !xex)
     a.console &= (uint8_t)~4;
-  if (disk && Atari_LoadDisk(&a, disk))
-    fprintf(stderr, "a800: warning: cannot mount %s\n", disk);
+  if (media && !xex && Atari_LoadDisk(&a, media))
+    fprintf(stderr, "a800: warning: cannot mount %s\n", media);
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_EVENTS)) {
     fprintf(stderr, "SDL: %s\n", SDL_GetError());
     return 1;
@@ -141,7 +177,7 @@ int main(int argc, char **argv) {
   SDL_AudioDeviceID dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
   if (dev)
     SDL_PauseAudioDevice(dev, 0);
-  int run = 1;
+  int run = 1, boot_frames = 0;
   while (run) {
     uint64_t start = SDL_GetPerformanceCounter();
     SDL_Event e;
@@ -154,6 +190,11 @@ int main(int argc, char **argv) {
         input(&a, &e, 0);
     }
     Atari_Frame(&a);
+    if (xex && ++boot_frames == 100) {
+      if (Atari_LoadExecutable(&a, xex))
+        fprintf(stderr, "a800: cannot load executable %s\n", xex);
+      xex = NULL;
+    }
     SDL_UpdateTexture(tex, NULL, a.pixels, A800_WIDTH * 4);
     SDL_RenderClear(ren);
     SDL_RenderCopy(ren, tex, NULL, NULL);

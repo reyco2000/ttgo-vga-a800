@@ -29,6 +29,27 @@ static int rows_for(int mode) {
                                 8, 4, 4, 2,  1, 2,  1, 1};
   return n[mode & 15];
 }
+void Antic_ScheduleDlis(Atari *a) {
+  uint16_t dl = (uint16_t)(a->antic[2] | a->antic[3] << 8);
+  int y = 8, guard = 0;
+  memset(a->dli_lines, 0, sizeof(a->dli_lines));
+  while (y < a->frame_lines && guard++ < 1024) {
+    uint8_t ins = Atari_Read(a, dl++), mode = ins & 15;
+    if (mode == 1) {
+      dl = (uint16_t)(Atari_Read(a, dl) | Atari_Read(a, (uint16_t)(dl + 1))
+                                              << 8);
+      if (ins & 64)
+        break;
+      continue;
+    }
+    if (mode >= 2 && (ins & 64))
+      dl += 2;
+    int rows = mode ? rows_for(mode) : ((ins >> 4) & 7) + 1;
+    y += rows;
+    if ((ins & 128) && y > 0 && y <= a->frame_lines)
+      a->dli_lines[y - 1] = 1;
+  }
+}
 static void span(Atari *a, int y, int x, int n, uint8_t c) {
   if (y < 0 || y >= a->frame_lines)
     return;
@@ -50,8 +71,9 @@ static void draw_mode(Atari *a, int mode, int y, int row, uint16_t mem,
                       int width) {
   int bytes = line_bytes(mode, width), scale = (mode == 6 || mode == 7) ? 2 : 1,
       x = (A800_WIDTH - bytes * 8 * scale) / 2;
-  uint8_t bg = a->gtia[26],
-          pf[4] = {a->gtia[22], a->gtia[23], a->gtia[24], a->gtia[25]};
+  uint8_t bg = a->line_colors[y][4],
+          pf[4] = {a->line_colors[y][0], a->line_colors[y][1],
+                   a->line_colors[y][2], a->line_colors[y][3]};
   span(a, y, 0, A800_WIDTH, bg);
   for (int b = 0; b < bytes; b++) {
     uint8_t d = Atari_Read(a, (uint16_t)(mem + b));
@@ -97,8 +119,8 @@ static void draw_mode(Atari *a, int mode, int y, int row, uint16_t mem,
 void Antic_Frame(Atari *a) {
   uint16_t dl = (uint16_t)(a->antic[2] | a->antic[3] << 8), mem = 0;
   int y = 8, guard = 0;
-  for (int i = 0; i < A800_WIDTH * a->frame_lines; i++)
-    a->pixels[i] = Gtia_Color(a->gtia[26]);
+  for (int y = 0; y < a->frame_lines; y++)
+    span(a, y, 0, A800_WIDTH, a->line_colors[y][4]);
   while (y < a->frame_lines - 8 && guard++ < 1024) {
     uint8_t ins = Atari_Read(a, dl++), mode = ins & 15;
     if (mode == 1) {
@@ -109,7 +131,7 @@ void Antic_Frame(Atari *a) {
         break;
       continue;
     }
-    if (ins & 64) {
+    if (mode >= 2 && (ins & 64)) {
       mem = (uint16_t)(Atari_Read(a, dl) | Atari_Read(a, (uint16_t)(dl + 1))
                                                << 8);
       dl += 2;
