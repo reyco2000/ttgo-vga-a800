@@ -74,7 +74,7 @@ static void input(Atari *a, const SDL_Event *e, int down) {
     return;
   }
   if (k == SDLK_LALT || k == SDLK_RALT) {
-    a->trigger = (uint8_t)!down;
+    a->trigger[0] = (uint8_t)!down;
     return;
   }
   if (k == SDLK_F2) {

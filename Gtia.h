@@ -3,5 +3,6 @@
 #include "Atari.h"
 uint8_t Gtia_Read(Atari *a, uint16_t address);
 void Gtia_Write(Atari *a, uint16_t address, uint8_t value);
+void Gtia_Frame(Atari *a);
 uint32_t Gtia_Color(uint8_t value);
 #endif

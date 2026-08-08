@@ -23,7 +23,10 @@ struct Atari {
   uint8_t line_antic[A800_MAX_HEIGHT][16];
   uint8_t line_pmg[A800_MAX_HEIGHT][5], pm_latch[5];
   uint8_t dli_lines[A800_MAX_HEIGHT];
-  uint8_t collision_map[A800_WIDTH * A800_MAX_HEIGHT];
+  uint16_t collision_map[A800_WIDTH * A800_MAX_HEIGHT];
+  uint16_t display_list, screen_memory;
+  uint8_t display_mode, display_row, display_rows, display_width,
+      display_scroll, display_stopped;
   uint16_t pc;
   uint8_t a, x, y, s, p;
   uint64_t cycles;
@@ -33,7 +36,7 @@ struct Atari {
   unsigned cpu_hz;
   double frame_rate;
   int irq, nmi, stopped;
-  uint8_t keycode, console, joystick, trigger;
+  uint8_t keycode, console, joystick, trigger[4], trigger_latch[4];
   unsigned option_override;
   uint32_t rng;
   double audio_phase[4];

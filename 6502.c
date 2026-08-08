@@ -31,6 +31,19 @@ static uint16_t iy(Atari *m) {
   uint8_t z = fetch(m);
   return (uint16_t)((rd(m, z) | rd(m, (uint8_t)(z + 1)) << 8) + m->y);
 }
+static uint16_t indexed(uint16_t base, uint8_t index, int *cycles) {
+  uint16_t result = (uint16_t)(base + index);
+  if ((base ^ result) & 0xff00)
+    (*cycles)++;
+  return result;
+}
+static uint16_t axr(Atari *m, int *c) { return indexed(word(m), m->x, c); }
+static uint16_t ayr(Atari *m, int *c) { return indexed(word(m), m->y, c); }
+static uint16_t iyr(Atari *m, int *c) {
+  uint8_t z = fetch(m);
+  uint16_t base = (uint16_t)(rd(m, z) | rd(m, (uint8_t)(z + 1)) << 8);
+  return indexed(base, m->y, c);
+}
 static void cmp(Atari *m, uint8_t r, uint8_t v) {
   uint16_t q = (uint16_t)r - v;
   m->p = (uint8_t)((m->p & ~C) | (r >= v ? C : 0));
@@ -112,8 +125,11 @@ void Cpu_Irq(Atari *m) {
   do {                                                                         \
     int8_t d = (int8_t)fetch(m);                                               \
     if (test) {                                                                \
+      uint16_t old = m->pc;                                                    \
       m->pc = (uint16_t)(m->pc + d);                                           \
       c++;                                                                     \
+      if ((old ^ m->pc) & 0xff00)                                              \
+        c++;                                                                   \
     }                                                                          \
   } while (0)
 
@@ -201,9 +217,9 @@ int Cpu_Step(Atari *m) {
     BRANCH(!(m->p & N));
     break;
   case 0x11:
-    m->a |= rd(m, iy(m));
-    nz(m, m->a);
     c = 5;
+    m->a |= rd(m, iyr(m, &c));
+    nz(m, m->a);
     break;
   case 0x15:
     m->a |= rd(m, zpx(m));
@@ -218,14 +234,14 @@ int Cpu_Step(Atari *m) {
     m->p &= ~C;
     break;
   case 0x19:
-    m->a |= rd(m, ay(m));
-    nz(m, m->a);
     c = 4;
+    m->a |= rd(m, ayr(m, &c));
+    nz(m, m->a);
     break;
   case 0x1d:
-    m->a |= rd(m, ax(m));
-    nz(m, m->a);
     c = 4;
+    m->a |= rd(m, axr(m, &c));
+    nz(m, m->a);
     break;
   case 0x1e:
     RMW(ax(m), (uint8_t)((v << 1) | ((m->p = (m->p & ~C) | (v >> 7)), 0)));
@@ -304,9 +320,9 @@ int Cpu_Step(Atari *m) {
     BRANCH(m->p & N);
     break;
   case 0x31:
-    m->a &= rd(m, iy(m));
-    nz(m, m->a);
     c = 5;
+    m->a &= rd(m, iyr(m, &c));
+    nz(m, m->a);
     break;
   case 0x35:
     m->a &= rd(m, zpx(m));
@@ -328,14 +344,14 @@ int Cpu_Step(Atari *m) {
     m->p |= C;
     break;
   case 0x39:
-    m->a &= rd(m, ay(m));
-    nz(m, m->a);
     c = 4;
+    m->a &= rd(m, ayr(m, &c));
+    nz(m, m->a);
     break;
   case 0x3d:
-    m->a &= rd(m, ax(m));
-    nz(m, m->a);
     c = 4;
+    m->a &= rd(m, axr(m, &c));
+    nz(m, m->a);
     break;
   case 0x3e:
     q = ax(m);
@@ -412,9 +428,9 @@ int Cpu_Step(Atari *m) {
     BRANCH(!(m->p & V));
     break;
   case 0x51:
-    m->a ^= rd(m, iy(m));
-    nz(m, m->a);
     c = 5;
+    m->a ^= rd(m, iyr(m, &c));
+    nz(m, m->a);
     break;
   case 0x55:
     m->a ^= rd(m, zpx(m));
@@ -436,14 +452,14 @@ int Cpu_Step(Atari *m) {
     m->p &= ~I;
     break;
   case 0x59:
-    m->a ^= rd(m, ay(m));
-    nz(m, m->a);
     c = 4;
+    m->a ^= rd(m, ayr(m, &c));
+    nz(m, m->a);
     break;
   case 0x5d:
-    m->a ^= rd(m, ax(m));
-    nz(m, m->a);
     c = 4;
+    m->a ^= rd(m, axr(m, &c));
+    nz(m, m->a);
     break;
   case 0x5e:
     q = ax(m);
@@ -510,8 +526,8 @@ int Cpu_Step(Atari *m) {
     BRANCH(m->p & V);
     break;
   case 0x71:
-    adc(m, rd(m, iy(m)));
     c = 5;
+    adc(m, rd(m, iyr(m, &c)));
     break;
   case 0x6e:
     q = word(m);
@@ -532,12 +548,12 @@ int Cpu_Step(Atari *m) {
     m->p |= I;
     break;
   case 0x79:
-    adc(m, rd(m, ay(m)));
     c = 4;
+    adc(m, rd(m, ayr(m, &c)));
     break;
   case 0x7d:
-    adc(m, rd(m, ax(m)));
     c = 4;
+    adc(m, rd(m, axr(m, &c)));
     break;
   case 0x76:
     q = zpx(m);
@@ -680,8 +696,8 @@ int Cpu_Step(Atari *m) {
     BRANCH(m->p & C);
     break;
   case 0xb1:
-    LOAD(m->a, iy(m));
     c = 5;
+    LOAD(m->a, iyr(m, &c));
     break;
   case 0xb4:
     LOAD(m->y, zpx(m));
@@ -699,24 +715,24 @@ int Cpu_Step(Atari *m) {
     m->p &= ~V;
     break;
   case 0xb9:
-    LOAD(m->a, ay(m));
     c = 4;
+    LOAD(m->a, ayr(m, &c));
     break;
   case 0xba:
     m->x = m->s;
     nz(m, m->x);
     break;
   case 0xbc:
-    LOAD(m->y, ax(m));
     c = 4;
+    LOAD(m->y, axr(m, &c));
     break;
   case 0xbd:
-    LOAD(m->a, ax(m));
     c = 4;
+    LOAD(m->a, axr(m, &c));
     break;
   case 0xbe:
-    LOAD(m->x, ay(m));
     c = 4;
+    LOAD(m->x, ayr(m, &c));
     break;
   case 0xc0:
     cmp(m, m->y, fetch(m));
@@ -774,8 +790,8 @@ int Cpu_Step(Atari *m) {
     BRANCH(!(m->p & Z));
     break;
   case 0xd1:
-    cmp(m, m->a, rd(m, iy(m)));
     c = 5;
+    cmp(m, m->a, rd(m, iyr(m, &c)));
     break;
   case 0xd5:
     cmp(m, m->a, rd(m, zpx(m)));
@@ -794,12 +810,12 @@ int Cpu_Step(Atari *m) {
     c = 6;
     break;
   case 0xd9:
-    cmp(m, m->a, rd(m, ay(m)));
     c = 4;
+    cmp(m, m->a, rd(m, ayr(m, &c)));
     break;
   case 0xdd:
-    cmp(m, m->a, rd(m, ax(m)));
     c = 4;
+    cmp(m, m->a, rd(m, axr(m, &c)));
     break;
   case 0xde:
     q = ax(m);
@@ -865,8 +881,8 @@ int Cpu_Step(Atari *m) {
     BRANCH(m->p & Z);
     break;
   case 0xf1:
-    sbc(m, rd(m, iy(m)));
     c = 5;
+    sbc(m, rd(m, iyr(m, &c)));
     break;
   case 0xf5:
     sbc(m, rd(m, zpx(m)));
@@ -885,12 +901,12 @@ int Cpu_Step(Atari *m) {
     c = 6;
     break;
   case 0xf9:
-    sbc(m, rd(m, ay(m)));
     c = 4;
+    sbc(m, rd(m, ayr(m, &c)));
     break;
   case 0xfd:
-    sbc(m, rd(m, ax(m)));
     c = 4;
+    sbc(m, rd(m, axr(m, &c)));
     break;
   case 0xfe:
     q = ax(m);

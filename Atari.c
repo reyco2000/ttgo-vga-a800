@@ -12,7 +12,8 @@ int Atari_Init(Atari *a, const char *os, const char *basic) {
   memset(a, 0, sizeof(*a));
   a->console = 7;
   a->joystick = 0xff;
-  a->trigger = 1;
+  memset(a->trigger, 1, sizeof(a->trigger));
+  memset(a->trigger_latch, 1, sizeof(a->trigger_latch));
   a->rng = 0x19770825;
   Atari_SetVideoStandard(a, A800_NTSC);
   Pia_Reset(a);
@@ -41,6 +42,7 @@ void Atari_Reset(Atari *a) {
   memset(a->gtia, 0, sizeof(a->gtia));
   memset(a->gtia_collisions, 0, sizeof(a->gtia_collisions));
   memset(a->pm_latch, 0, sizeof(a->pm_latch));
+  memset(a->trigger_latch, 1, sizeof(a->trigger_latch));
   memset(a->pokey, 0, sizeof(a->pokey));
   a->pokey_irqen = a->pokey_skctl = 0;
   a->pokey_irqst = a->pokey_skstat = 0xff;
@@ -98,6 +100,7 @@ void Atari_Write(Atari *a, uint16_t p, uint8_t v) {
 }
 void Atari_Frame(Atari *a) {
   Antic_ScheduleDlis(a);
+  Antic_BeginFrame(a);
   for (a->scanline = 0; a->scanline < a->frame_lines; a->scanline++) {
     a->line_cycles = 0;
     if (a->dli_lines[a->scanline]) {
@@ -120,8 +123,9 @@ void Atari_Frame(Atari *a) {
     for (int i = 0; i < 4; i++)
       a->line_colors[a->scanline][i] = a->gtia[22 + i];
     a->line_colors[a->scanline][4] = a->gtia[26];
+    Antic_RenderLine(a, a->scanline);
   }
-  Antic_Frame(a);
+  Gtia_Frame(a);
 }
 void Atari_Destroy(Atari *a) {
   free(a->disk);

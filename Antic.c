@@ -31,10 +31,11 @@ void Antic_CaptureLine(Atari *a) {
   memcpy(a->line_antic[y], a->antic, sizeof(a->antic));
   if (a->antic[0] & 8)
     for (int p = 0; p < 4; p++)
-      a->pm_latch[p] = Atari_Read(
-          a, (uint16_t)(base + (one ? 0x400 + p * 0x100 : 0x200 + p * 0x80) +
-                        row));
-  if (a->antic[0] & 12)
+      if (!(a->gtia[28] & (1 << p)) || (y & 1))
+        a->pm_latch[p] = Atari_Read(
+            a, (uint16_t)(base + (one ? 0x400 + p * 0x100 : 0x200 + p * 0x80) +
+                          row));
+  if ((a->antic[0] & 12) && (!(a->gtia[28] & 0x10) || (y & 1)))
     a->pm_latch[4] =
         Atari_Read(a, (uint16_t)(base + (one ? 0x300 : 0x180) + row));
   memcpy(a->line_pmg[y], a->pm_latch, sizeof(a->pm_latch));
@@ -133,22 +134,34 @@ static void draw_mode(Atari *a, int mode, int y, int row, uint16_t mem,
   uint8_t bg = a->line_colors[y][4],
           pf[4] = {a->line_colors[y][0], a->line_colors[y][1],
                    a->line_colors[y][2], a->line_colors[y][3]},
-          prior = a->line_gtia[y][27];
+          prior = a->line_gtia[y][27], chactl = a->line_antic[y][1];
+  if (a->display_scroll & 0x10)
+    x += (a->line_antic[y][4] & 15) * 2;
   span(a, y, 0, A800_WIDTH, bg);
   for (int b = 0; b < bytes; b++) {
     uint8_t d = Atari_Read(a, (uint16_t)(mem + b));
     if (mode == 2 || mode == 3) {
+      int blank = mode == 3 && ((d & 0x60) == 0x60 ? row < 2 : row >= 8),
+          glyph = row & 7;
+      if (chactl & 4)
+        glyph = 7 - glyph;
       uint16_t ch = (uint16_t)(((a->line_antic[y][9] & 0xfc) << 8) |
-                               ((d & 127) * 8) + (row & 7));
-      uint8_t bits = Atari_Read(a, ch);
-      if (d & 128)
-        bits ^= 255;
+                               ((d & 127) * 8) + glyph);
+      uint8_t bits = blank ? 0 : Atari_Read(a, ch);
+      if (d & 128) {
+        if (chactl & 1)
+          bits = 0;
+        if (chactl & 2)
+          bits ^= 255;
+      }
       uint8_t paper = pf[2], ink = (uint8_t)((pf[2] & 0xf0) | (pf[1] & 0x0e));
       for (int k = 0; k < 8; k++)
         pfspan(a, y, x + b * 8 + k, 1, (bits & (128 >> k)) ? ink : paper,
                (bits & (128 >> k)) ? 4 : 0);
     } else if (mode == 4 || mode == 5) {
       int glyph_row = mode == 5 ? row / 2 : row;
+      if (chactl & 4)
+        glyph_row = 7 - (glyph_row & 7);
       uint16_t ch = (uint16_t)(((a->line_antic[y][9] & 0xfc) << 8) |
                                ((d & 127) * 8) + (glyph_row & 7));
       uint8_t bits = Atari_Read(a, ch);
@@ -161,6 +174,8 @@ static void draw_mode(Atari *a, int mode, int y, int row, uint16_t mem,
       }
     } else if (mode == 6 || mode == 7) {
       int glyph_row = mode == 7 ? row / 2 : row;
+      if (chactl & 4)
+        glyph_row = 7 - (glyph_row & 7);
       uint16_t ch = (uint16_t)(((a->line_antic[y][9] & 0xfe) << 8) |
                                ((d & 63) * 8) + (glyph_row & 7));
       uint8_t bits = Atari_Read(a, ch);
@@ -209,7 +224,37 @@ static int pm_scale(uint8_t size) {
   static const uint8_t scale[4] = {1, 2, 1, 4};
   return scale[size & 3];
 }
-static void player_pixel(Atari *a, int y, int x, int n, int p, uint8_t color) {
+static uint8_t priority_color(Atari *a, int y, uint16_t objects) {
+  uint8_t *g = a->line_gtia[y], prior = g[27], pf = objects & 15,
+          p = (objects >> 4) & 15, m = (objects >> 8) & 15, out = 0;
+  int multi = (prior & 0x20) != 0;
+  if (prior & 0x10)
+    pf |= m ? 8 : 0;
+  else
+    p |= m;
+  int p01 = (p & 3) != 0, p23 = (p & 12) != 0, pf01 = (pf & 3) != 0,
+      pf23 = (pf & 12) != 0, pri01 = (prior & 3) != 0, pri12 = (prior & 6) != 0,
+      pri23 = (prior & 12) != 0, pri03 = (prior & 9) != 0;
+  int sp[4] = {(p & 1) && !(pf01 && pri23) && !((prior & 4) && pf23),
+               (p & 2) && !(pf01 && pri23) && !((prior & 4) && pf23) &&
+                   (!(p & 1) || multi),
+               (p & 4) && !p01 && !(pf23 && pri12) && !(pf01 && !(prior & 1)),
+               (p & 8) && !p01 && !(pf23 && pri12) && !(pf01 && !(prior & 1)) &&
+                   (!(p & 4) || multi)};
+  int sf3 = (pf & 8) && !(p23 && pri03) && !(p01 && !(prior & 4));
+  int sf[4] = {(pf & 1) && !(p23 && (prior & 1)) && !(p01 && pri01) && !sf3,
+               (pf & 2) && !(p23 && (prior & 1)) && !(p01 && pri01) && !sf3,
+               (pf & 4) && !(p23 && pri03) && !(p01 && !(prior & 4)) && !sf3,
+               sf3};
+  for (int i = 0; i < 4; i++) {
+    if (sp[i])
+      out |= g[18 + i];
+    if (sf[i])
+      out |= a->line_colors[y][i];
+  }
+  return (p || pf) ? out : a->line_colors[y][4];
+}
+static void player_pixel(Atari *a, int y, int x, int n, int p) {
   if (x < 0) {
     n += x;
     x = 0;
@@ -217,18 +262,19 @@ static void player_pixel(Atari *a, int y, int x, int n, int p, uint8_t color) {
   if (x + n > A800_WIDTH)
     n = A800_WIDTH - x;
   for (int i = 0; i < n; i++) {
-    uint8_t *m = &a->collision_map[y * A800_WIDTH + x + i], players = *m >> 4;
-    a->gtia_collisions[4 + p] |= *m & 15;
+    uint16_t *m = &a->collision_map[y * A800_WIDTH + x + i];
+    uint8_t players = (uint8_t)(*m >> 4) & 15;
+    a->gtia_collisions[4 + p] |= (uint8_t)(*m & 15);
     for (int q = 0; q < 4; q++)
       if (players & (1 << q)) {
         a->gtia_collisions[12 + p] |= (uint8_t)(1 << q);
         a->gtia_collisions[12 + q] |= (uint8_t)(1 << p);
       }
-    *m |= (uint8_t)(0x10 << p);
+    *m |= (uint16_t)(0x10 << p);
+    a->pixels[y * A800_WIDTH + x + i] = Gtia_Color(priority_color(a, y, *m));
   }
-  span(a, y, x, n, color);
 }
-static void missile_pixel(Atari *a, int y, int x, int n, int m, uint8_t color) {
+static void missile_pixel(Atari *a, int y, int x, int n, int m) {
   if (x < 0) {
     n += x;
     x = 0;
@@ -236,11 +282,12 @@ static void missile_pixel(Atari *a, int y, int x, int n, int m, uint8_t color) {
   if (x + n > A800_WIDTH)
     n = A800_WIDTH - x;
   for (int i = 0; i < n; i++) {
-    uint8_t v = a->collision_map[y * A800_WIDTH + x + i];
-    a->gtia_collisions[m] |= v & 15;
-    a->gtia_collisions[8 + m] |= v >> 4;
+    uint16_t *v = &a->collision_map[y * A800_WIDTH + x + i];
+    a->gtia_collisions[m] |= (uint8_t)(*v & 15);
+    a->gtia_collisions[8 + m] |= (uint8_t)(*v >> 4) & 15;
+    *v |= (uint16_t)(0x100 << m);
+    a->pixels[y * A800_WIDTH + x + i] = Gtia_Color(priority_color(a, y, *v));
   }
-  span(a, y, x, n, color);
 }
 static void draw_pmg(Atari *a, int y) {
   if (y < 8 || y >= 248)
@@ -252,50 +299,76 @@ static void draw_pmg(Atari *a, int y) {
       int s = pm_scale(g[8 + p]), x = (g[p] - 0x22) * 2 + 4;
       for (int b = 0; b < 8; b++)
         if (bits & (128 >> b))
-          player_pixel(a, y, x + b * 2 * s, 2 * s, p, g[18 + p]);
+          player_pixel(a, y, x + b * 2 * s, 2 * s, p);
     }
   if (g[29] & 1) {
     uint8_t bits = pm[4];
     for (int m = 0; m < 4; m++)
       if (bits & (2 << (m * 2))) {
         int s = pm_scale(g[12] >> (m * 2)), x = (g[4 + m] - 0x22) * 2 + 4;
-        missile_pixel(a, y, x, 2 * s, m, (g[27] & 0x10) ? g[25] : g[18 + m]);
+        missile_pixel(a, y, x, 2 * s, m);
       }
   }
 }
-void Antic_Frame(Atari *a) {
-  uint16_t dl = (uint16_t)(a->antic[2] | a->antic[3] << 8), mem = 0;
-  int y = 8, guard = 0;
-  memset(a->collision_map, 0, (size_t)A800_WIDTH * a->frame_lines);
+void Antic_BeginFrame(Atari *a) {
+  a->display_list = (uint16_t)(a->antic[2] | a->antic[3] << 8);
+  a->screen_memory = 0;
+  a->display_mode = a->display_row = a->display_rows = a->display_scroll =
+      a->display_stopped = 0;
+  a->display_width = 2;
+  memset(a->collision_map, 0,
+         sizeof(*a->collision_map) * (size_t)A800_WIDTH * a->frame_lines);
   for (int y = 0; y < a->frame_lines; y++)
     span(a, y, 0, A800_WIDTH, a->line_colors[y][4]);
-  while (y < a->frame_lines - 8 && guard++ < 1024) {
-    uint8_t ins = Atari_Read(a, dl++), mode = ins & 15;
-    if (mode == 1) {
-      uint16_t target = (uint16_t)(Atari_Read(a, dl) |
-                                   Atari_Read(a, (uint16_t)(dl + 1)) << 8);
-      dl = target;
-      if (ins & 64)
-        break;
-      continue;
+}
+void Antic_RenderLine(Atari *a, int y) {
+  span(a, y, 0, A800_WIDTH, a->line_colors[y][4]);
+  if (y >= 8 && y < a->frame_lines - 8 && !a->display_stopped) {
+    int guard = 0;
+    while (!a->display_rows && guard++ < 32) {
+      uint8_t ins = Atari_Read(a, a->display_list++), mode = ins & 15;
+      if (mode == 1) {
+        uint16_t target =
+            (uint16_t)(Atari_Read(a, a->display_list) |
+                       Atari_Read(a, (uint16_t)(a->display_list + 1)) << 8);
+        a->display_list = target;
+        if (ins & 64)
+          a->display_stopped = 1;
+        continue;
+      }
+      a->display_mode = mode;
+      a->display_row = 0;
+      a->display_scroll = ins & 0x30;
+      a->display_width = (uint8_t)(a->line_antic[y][0] & 3);
+      if (!a->display_width)
+        a->display_width = 2;
+      if (mode >= 2 && (ins & 64)) {
+        a->screen_memory =
+            (uint16_t)(Atari_Read(a, a->display_list) |
+                       Atari_Read(a, (uint16_t)(a->display_list + 1)) << 8);
+        a->display_list += 2;
+      }
+      a->display_rows = (uint8_t)(mode ? rows_for(mode) : ((ins >> 4) & 7) + 1);
     }
-    if (mode >= 2 && (ins & 64)) {
-      mem = (uint16_t)(Atari_Read(a, dl) | Atari_Read(a, (uint16_t)(dl + 1))
-                                               << 8);
-      dl += 2;
+    if (a->display_rows) {
+      int row = a->display_row;
+      if (a->display_scroll & 0x20)
+        row = (row + (a->line_antic[y][5] & 15)) % rows_for(a->display_mode);
+      if (a->display_mode)
+        draw_mode(a, a->display_mode, y, row, a->screen_memory,
+                  a->display_width);
+      a->display_row++;
+      a->display_rows--;
+      if (!a->display_rows && a->display_mode)
+        a->screen_memory =
+            (uint16_t)(a->screen_memory +
+                       line_bytes(a->display_mode, a->display_width));
     }
-    int rows = rows_for(mode), width = (a->antic[0] & 3);
-    if (!width)
-      width = 2;
-    if (mode == 0) {
-      int blank = ((ins >> 4) & 7) + 1;
-      y += blank;
-      continue;
-    }
-    for (int r = 0; r < rows && y < a->frame_lines; r++, y++)
-      draw_mode(a, mode, y, r, mem, width);
-    mem = (uint16_t)(mem + line_bytes(mode, width));
   }
-  for (int line = 0; line < a->frame_lines; line++)
-    draw_pmg(a, line);
+  draw_pmg(a, y);
+}
+void Antic_Frame(Atari *a) {
+  Antic_BeginFrame(a);
+  for (int y = 0; y < a->frame_lines; y++)
+    Antic_RenderLine(a, y);
 }

@@ -17,12 +17,14 @@ useful as a compact core to read and extend.
   lines, 1.773 MHz, 49.86 Hz) timing, WSYNC, VCOUNT, GTIA PAL identification,
   and VBI NMI
 - ANTIC display-list traversal, including monochrome, multicolor, and
-  double-width character modes, plus approximate bitmap-mode rendering
+  double-width character modes, CHACTL, practical HSCROL/VSCROL, and
+  approximate bitmap-mode rendering
 - scanline DLI scheduling with per-line ANTIC/GTIA register and PMG DMA capture
 - GTIA color registers, modes 9/10/11 for ANTIC mode F, console/trigger input,
   and an Atari-inspired palette
 - basic player/missile DMA or direct-GRAF rendering with positions, sizes,
-  fifth-player colors, sticky playfield/player collision latches, and HITCLR
+  VDELAY, fifth-player and multicolor priority mixing, sticky collision
+  latches, HITCLR, and latched joystick triggers
 - PIA joystick and PORTB registers
 - POKEY keyboard, random register, basic timer IRQs, and four-channel square
   wave audio
@@ -33,14 +35,13 @@ useful as a compact core to read and extend.
 - SDL2 video, audio, keyboard, joystick-key, and console-key frontend
 
 Important current limits: ANTIC/GTIA are scanline approximations rather than
-cycle-exact; full player/missile priority mixing, GTIA modes on character
-modes, VDELAY, scrolling, serial SIO command
-transport at the POKEY bit level, cartridges, save states, and undocumented
-CPU instructions are not implemented. The SIOV acceleration lets
+cycle-exact; GTIA modes on character modes, precise scrolling fetch windows,
+serial SIO command transport at the POKEY bit level, cartridges, save states,
+and undocumented CPU instructions are not implemented. The SIOV acceleration lets
 the stock XL OS boot compatible ATR images without bit-level serial emulation.
-Playfield/display-list memory is still interpreted at the end of the frame,
-but scanline-sensitive color, character-base, and player/missile data is
-captured while the CPU runs so later writes do not alter earlier scanlines.
+Display-list state, playfield data, colors, character-base, player/missile
+data, and collisions now advance one scanline at a time. Register changes
+within a scanline are still approximated at its ending boundary.
 
 ### Reference audit priorities
 
@@ -48,18 +49,13 @@ A focused comparison with Atari800, A8E, and the local hardware reference
 identified these next compatibility improvements while retaining the flat,
 small implementation:
 
-1. Advance display-list state and render at the end of each emulated scanline
-   instead of interpreting playfield memory after the complete CPU frame. This
-   also makes collision latches visible to the CPU on the following line.
-2. Apply the complete GTIA PRIOR truth table when mixing playfield and
-   player/missile pixels; include fifth-player and paired-player multicolor
-   behavior.
-3. Add ANTIC HSCROL/VSCROL addressing and visible-window offsets, followed by
-   GTIA VDELAY and trigger latching.
-4. Improve CPU cycle counts (especially page crossings and DMA steals) and add
+1. Refine HSCROL fetch promotion/clipping and VSCROL entry/exit row counts,
+   then extend GTIA modes 9, 10, and 11 from ANTIC mode F to modes 2/3.
+2. Improve CPU cycle counts (especially page crossings and DMA steals) and add
    the stable undocumented opcodes used by software.
-5. Extend GTIA modes 9, 10, and 11 from ANTIC mode F to character modes 2/3,
-   and refine POKEY AUDCTL, joined timers, noise, and timer start/IRQ timing.
+3. Refine POKEY AUDCTL, joined timers, noise, and timer start/IRQ timing.
+4. Model same-scanline player/missile repositioning and shift-register
+   retrigger behavior only where software compatibility demonstrates a need.
 
 Lower-priority subsystems such as cartridges, save states, and bit-level SIO
 should remain separate additions rather than enlarging the core preemptively.
