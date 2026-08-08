@@ -48,12 +48,18 @@ A focused comparison with Atari800, A8E, and the local hardware reference
 identified these next compatibility improvements while retaining the flat,
 small implementation:
 
-1. Apply the complete GTIA PRIOR truth table when mixing playfield and
-   player/missile pixels; include paired-player multicolor behavior.
-2. Add ANTIC HSCROL/VSCROL addressing and visible-window offsets.
-3. Extend GTIA modes 9, 10, and 11 from ANTIC mode F to character modes 2/3.
-4. Add GTIA VDELAY and trigger latching, then refine joined POKEY timers and
-   timer start/IRQ timing.
+1. Advance display-list state and render at the end of each emulated scanline
+   instead of interpreting playfield memory after the complete CPU frame. This
+   also makes collision latches visible to the CPU on the following line.
+2. Apply the complete GTIA PRIOR truth table when mixing playfield and
+   player/missile pixels; include fifth-player and paired-player multicolor
+   behavior.
+3. Add ANTIC HSCROL/VSCROL addressing and visible-window offsets, followed by
+   GTIA VDELAY and trigger latching.
+4. Improve CPU cycle counts (especially page crossings and DMA steals) and add
+   the stable undocumented opcodes used by software.
+5. Extend GTIA modes 9, 10, and 11 from ANTIC mode F to character modes 2/3,
+   and refine POKEY AUDCTL, joined timers, noise, and timer start/IRQ timing.
 
 Lower-priority subsystems such as cartridges, save states, and bit-level SIO
 should remain separate additions rather than enlarging the core preemptively.
@@ -118,6 +124,12 @@ mapped to the Atari keyboard matrix and POKEY registers.
 | `AtariIo.c` | ROM, ATR/SIOV, and segmented XEX loading |
 | `Atari.c` | machine wiring and memory map |
 | `A800.c` | SDL2 application |
+
+The hardware-named files are intentionally retained even when small. Merging
+`Gtia.c` into `Antic.c`, or folding `Pia.c`/`Pokey.c` into `Atari.c`, would mix
+register-device behavior with the scanline scheduler and memory bus. The
+current boundaries match the requested A8E-style layout and leave room for the
+remaining behavior without requiring additional source files.
 
 ## Validation utility
 
