@@ -71,6 +71,11 @@ Provide exact-size Atari XL ROM dumps (not included):
 ./build/a800 --os path/to/ATARIXL.ROM --basic path/to/ATARIBAS.ROM
 ```
 
+Without `-b`, BASIC is disabled for normal boot. XEX startup performs the XL
+OS initialization needed by programs, transfers control while the CPU is still
+executing OS code, and disables the BASIC bank at handoff. BASIC code is not
+executed and `READY` is not displayed while launching a XEX.
+
 Controls: arrows are joystick directions, Left/Right Alt is fire, F2/F3/F4
 are OPTION/SELECT/START, F5 resets, and F8 is BREAK. Normal letter, number,
 punctuation, Return, Space, Backspace, Escape, Tab, Shift, and Control input is
@@ -88,6 +93,25 @@ mapped to the Atari keyboard matrix and POKEY registers.
 | `AtariIo.c` | ROM files and ATR sector layout |
 | `Atari.c` | machine wiring and memory map |
 | `A800.c` | SDL2 application |
+
+## Validation utility
+
+The build also produces `a800-validate`, a headless replacement for the small
+one-off boot and framebuffer probes used during development. It reports CPU,
+banking, ANTIC, GTIA, POKEY, and framebuffer state and can save the final frame
+as a portable pixmap:
+
+```sh
+./build/a800-validate --basic --frames 180
+./build/a800-validate --frames 300 program.xex
+./build/a800-validate --frames 300 --output frame.ppm disk.atr
+./build/a800-validate --pal --frames 180
+```
+
+Use `--os` and `--basic-rom` to select ROM files. The utility returns failure
+for invalid arguments, ROM/media errors, or a final frame with playfield DMA
+disabled. `--xex-frame N` overrides the default frame-76 XEX handoff for boot
+sequencing investigations.
 
 ## Provenance
 

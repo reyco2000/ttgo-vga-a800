@@ -190,15 +190,19 @@ int main(int argc, char **argv) {
         input(&a, &e, 0);
     }
     Atari_Frame(&a);
-    if (xex && ++boot_frames == 100) {
+    if (xex && ++boot_frames == 76) {
       if (Atari_LoadExecutable(&a, xex))
         fprintf(stderr, "a800: cannot load executable %s\n", xex);
+      else
+        Atari_Frame(&a);
       xex = NULL;
     }
-    SDL_UpdateTexture(tex, NULL, a.pixels, A800_WIDTH * 4);
-    SDL_RenderClear(ren);
-    SDL_RenderCopy(ren, tex, NULL, NULL);
-    SDL_RenderPresent(ren);
+    if (!xex) {
+      SDL_UpdateTexture(tex, NULL, a.pixels, A800_WIDTH * 4);
+      SDL_RenderClear(ren);
+      SDL_RenderCopy(ren, tex, NULL, NULL);
+      SDL_RenderPresent(ren);
+    }
     if (dev && SDL_GetQueuedAudioSize(dev) < 8192) {
       int count = (int)(have.freq / a.frame_rate + .5);
       int16_t samples[1024];

@@ -98,5 +98,25 @@ int main(void) {
   a.ram[0x3428] = 0x80;
   Antic_Frame(&a);
   assert(a.pixels[40 * A800_WIDTH + 192] == Gtia_Color(0x4a));
+  memset(&a, 0, sizeof(a));
+  Atari_SetVideoStandard(&a, A800_NTSC);
+  a.pia[1] = 0;
+  a.pia_ddr[1] = 0xff;
+  a.antic[0] = 2;
+  a.antic[2] = 0;
+  a.antic[3] = 2;
+  a.ram[0x200] = 0x49;
+  a.ram[0x201] = 0;
+  a.ram[0x202] = 3;
+  a.ram[0x203] = 0x41;
+  a.ram[0x204] = 0;
+  a.ram[0x205] = 2;
+  a.ram[0x300] = 0x80;
+  for (int line = 8; line < 12; line++)
+    a.line_colors[line][0] = 0x4a;
+  Antic_Frame(&a);
+  assert(a.pixels[8 * A800_WIDTH + 32] == Gtia_Color(0x4a));
+  assert(a.pixels[8 * A800_WIDTH + 35] == Gtia_Color(0x4a));
+  assert(a.pixels[8 * A800_WIDTH + 36] == Gtia_Color(0));
   return 0;
 }

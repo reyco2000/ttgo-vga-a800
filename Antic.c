@@ -65,12 +65,20 @@ static void span(Atari *a, int y, int x, int n, uint8_t c) {
 static int line_bytes(int mode, int width) {
   if (mode == 6 || mode == 7)
     return width == 3 ? 24 : width == 2 ? 20 : 16;
+  if (mode == 8 || mode == 9)
+    return width == 3 ? 12 : width == 2 ? 10 : 8;
+  if (mode == 10 || mode == 11 || mode == 12)
+    return width == 3 ? 24 : width == 2 ? 20 : 16;
   return width == 3 ? 48 : width == 2 ? 40 : 32;
 }
 static void draw_mode(Atari *a, int mode, int y, int row, uint16_t mem,
                       int width) {
   int bytes = line_bytes(mode, width), scale = (mode == 6 || mode == 7) ? 2 : 1,
-      x = (A800_WIDTH - bytes * 8 * scale) / 2;
+      pixels_per_byte = (mode == 6 || mode == 7)     ? 16
+                        : (mode == 8 || mode == 9)   ? 32
+                        : (mode >= 10 && mode <= 12) ? 16
+                                                     : 8,
+      x = (A800_WIDTH - bytes * pixels_per_byte) / 2;
   uint8_t bg = a->line_colors[y][4],
           pf[4] = {a->line_colors[y][0], a->line_colors[y][1],
                    a->line_colors[y][2], a->line_colors[y][3]};
@@ -105,14 +113,31 @@ static void draw_mode(Atari *a, int mode, int y, int row, uint16_t mem,
       for (int k = 0; k < 8; k++)
         span(a, y, x + (b * 8 + k) * scale, scale,
              (bits & (128 >> k)) ? ink : bg);
-    } else if (mode == 8 || mode == 10 || mode == 13 || mode == 14) {
-      for (int k = 0; k < 4; k++)
-        span(a, y, x + (b * 8 + k * 2) * scale, 2 * scale,
-             pf[(d >> (6 - k * 2)) & 3]);
-    } else {
+    } else if (mode == 8) {
+      for (int k = 0; k < 4; k++) {
+        unsigned v = (d >> (6 - k * 2)) & 3;
+        span(a, y, x + b * 32 + k * 8, 8, v ? pf[v - 1] : bg);
+      }
+    } else if (mode == 9) {
       for (int k = 0; k < 8; k++)
-        span(a, y, x + (b * 8 + k) * scale, scale,
-             (d & (128 >> k)) ? pf[2] : bg);
+        span(a, y, x + b * 32 + k * 4, 4, (d & (128 >> k)) ? pf[0] : bg);
+    } else if (mode == 10) {
+      for (int k = 0; k < 4; k++) {
+        unsigned v = (d >> (6 - k * 2)) & 3;
+        span(a, y, x + b * 16 + k * 4, 4, v ? pf[v - 1] : bg);
+      }
+    } else if (mode == 11 || mode == 12) {
+      for (int k = 0; k < 8; k++)
+        span(a, y, x + b * 16 + k * 2, 2, (d & (128 >> k)) ? pf[0] : bg);
+    } else if (mode == 13 || mode == 14) {
+      for (int k = 0; k < 4; k++) {
+        unsigned v = (d >> (6 - k * 2)) & 3;
+        span(a, y, x + b * 8 + k * 2, 2, v ? pf[v - 1] : bg);
+      }
+    } else {
+      uint8_t paper = pf[2], ink = (uint8_t)((pf[2] & 0xf0) | (pf[1] & 0x0e));
+      for (int k = 0; k < 8; k++)
+        span(a, y, x + b * 8 + k, 1, (d & (128 >> k)) ? ink : paper);
     }
   }
 }
