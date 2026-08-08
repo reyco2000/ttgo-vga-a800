@@ -29,7 +29,7 @@ uint32_t Gtia_Color(uint8_t c) {
 uint8_t Gtia_Read(Atari *a, uint16_t address) {
   unsigned r = address & 31;
   if (r < 16)
-    return a->gtia[r];
+    return a->gtia_collisions[r];
   if (r >= 16 && r <= 19)
     return a->trigger;
   if (r == 20)
@@ -43,5 +43,5 @@ void Gtia_Write(Atari *a, uint16_t address, uint8_t value) {
   a->gtia[r] = value;
   if (r == 30)
     for (unsigned i = 0; i < 16; i++)
-      a->gtia[i] = 0;
+      a->gtia_collisions[i] = 0;
 }

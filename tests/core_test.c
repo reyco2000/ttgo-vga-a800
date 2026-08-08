@@ -102,9 +102,10 @@ int main(void) {
   Atari_SetVideoStandard(&a, A800_NTSC);
   a.pia[1] = 0;
   a.pia_ddr[1] = 0xff;
-  a.antic[0] = 2;
+  a.antic[0] = 0x1e;
   a.antic[2] = 0;
   a.antic[3] = 2;
+  a.antic[7] = 0x30;
   a.ram[0x200] = 0x49;
   a.ram[0x201] = 0;
   a.ram[0x202] = 3;
@@ -114,9 +115,23 @@ int main(void) {
   a.ram[0x300] = 0x80;
   for (int line = 8; line < 12; line++)
     a.line_colors[line][0] = 0x4a;
+  a.line_gtia[8][0] = a.line_gtia[8][1] = a.line_gtia[8][4] = 48;
+  a.line_gtia[8][18] = 0x2a;
+  a.line_gtia[8][19] = 0x4a;
+  a.line_gtia[8][29] = 3;
+  a.ram[0x3308] = 3;
+  a.ram[0x3408] = a.ram[0x3508] = 0x80;
   Antic_Frame(&a);
-  assert(a.pixels[8 * A800_WIDTH + 32] == Gtia_Color(0x4a));
-  assert(a.pixels[8 * A800_WIDTH + 35] == Gtia_Color(0x4a));
+  assert(a.pixels[8 * A800_WIDTH + 32] == Gtia_Color(0x2a));
+  assert(a.pixels[8 * A800_WIDTH + 35] == Gtia_Color(0x2a));
   assert(a.pixels[8 * A800_WIDTH + 36] == Gtia_Color(0));
+  assert((Gtia_Read(&a, 0xd000) & 1) != 0);
+  assert((Gtia_Read(&a, 0xd004) & 1) != 0);
+  assert((Gtia_Read(&a, 0xd008) & 3) == 3);
+  assert((Gtia_Read(&a, 0xd00c) & 2) != 0);
+  assert((Gtia_Read(&a, 0xd00d) & 1) != 0);
+  Gtia_Write(&a, 0xd01e, 0);
+  for (int i = 0; i < 16; i++)
+    assert(a.gtia_collisions[i] == 0);
   return 0;
 }

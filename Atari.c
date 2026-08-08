@@ -39,6 +39,7 @@ void Atari_SetVideoStandard(Atari *a, AtariVideoStandard standard) {
 void Atari_Reset(Atari *a) {
   memset(a->antic, 0, sizeof(a->antic));
   memset(a->gtia, 0, sizeof(a->gtia));
+  memset(a->gtia_collisions, 0, sizeof(a->gtia_collisions));
   memset(a->pokey, 0, sizeof(a->pokey));
   a->pokey_irqen = a->pokey_skctl = 0;
   a->pokey_irqst = a->pokey_skstat = 0xff;

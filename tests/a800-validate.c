@@ -119,6 +119,14 @@ int main(int argc, char **argv) {
          "gractl=%02x\n",
          a.gtia[22], a.gtia[23], a.gtia[24], a.gtia[25], a.gtia[26], a.gtia[27],
          a.gtia[29]);
+  printf("collisions m-pf=%02x,%02x,%02x,%02x p-pf=%02x,%02x,%02x,%02x "
+         "m-pl=%02x,%02x,%02x,%02x p-pl=%02x,%02x,%02x,%02x\n",
+         a.gtia_collisions[0], a.gtia_collisions[1], a.gtia_collisions[2],
+         a.gtia_collisions[3], a.gtia_collisions[4], a.gtia_collisions[5],
+         a.gtia_collisions[6], a.gtia_collisions[7], a.gtia_collisions[8],
+         a.gtia_collisions[9], a.gtia_collisions[10], a.gtia_collisions[11],
+         a.gtia_collisions[12], a.gtia_collisions[13], a.gtia_collisions[14],
+         a.gtia_collisions[15]);
   printf("pokey irqen=%02x irqst=%02x skctl=%02x skstat=%02x\n", a.pokey_irqen,
          a.pokey_irqst, a.pokey_skctl, a.pokey_skstat);
   printf("framebuffer=%dx%d pixels_different_from_corner=%u media=%s\n",

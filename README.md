@@ -20,7 +20,8 @@ useful as a compact core to read and extend.
   double-width character modes, plus approximate bitmap-mode rendering
 - scanline DLI scheduling with per-line GTIA color capture
 - GTIA color registers, console/trigger input, and an Atari-inspired palette
-- basic player/missile DMA rendering with positions, sizes, and colors
+- basic player/missile DMA rendering with positions, sizes, colors, sticky
+  playfield/player collision latches, and HITCLR
 - PIA joystick and PORTB registers
 - POKEY keyboard, random register, basic timer IRQs, and four-channel square
   wave audio
@@ -31,10 +32,24 @@ useful as a compact core to read and extend.
 - SDL2 video, audio, keyboard, joystick-key, and console-key frontend
 
 Important current limits: ANTIC/GTIA are scanline approximations rather than
-cycle-exact; player/missile graphics, collisions, scrolling, serial SIO command
-  transport at the POKEY bit level, cartridges, save states, and undocumented
+cycle-exact; player/missile priority mixing, scrolling, serial SIO command
+transport at the POKEY bit level, cartridges, save states, and undocumented
 CPU instructions are not implemented. The SIOV acceleration lets
 the stock XL OS boot compatible ATR images without bit-level serial emulation.
+
+### Reference audit priorities
+
+A focused comparison with Atari800, A8E, and the local hardware reference
+identified these next compatibility improvements while retaining the flat,
+small implementation:
+
+1. Apply GTIA PRIOR rules when mixing playfield and player/missile pixels.
+2. Add ANTIC HSCROL/VSCROL addressing and visible-window offsets.
+3. Decode GTIA modes 9, 10, and 11 on top of ANTIC mode F.
+4. Refine joined POKEY timers and timer start/IRQ timing.
+
+Lower-priority subsystems such as cartridges, save states, and bit-level SIO
+should remain separate additions rather than enlarging the core preemptively.
 
 ## Build
 
@@ -90,7 +105,7 @@ mapped to the Atari keyboard matrix and POKEY registers.
 | `Gtia.c` | colors and console/trigger registers |
 | `Pokey.c` | keyboard, timers, random source, and audio |
 | `Pia.c` | joystick and XL memory-control ports |
-| `AtariIo.c` | ROM files and ATR sector layout |
+| `AtariIo.c` | ROM, ATR/SIOV, and segmented XEX loading |
 | `Atari.c` | machine wiring and memory map |
 | `A800.c` | SDL2 application |
 

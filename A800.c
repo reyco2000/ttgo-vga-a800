@@ -1,3 +1,4 @@
+/* SDL2 frontend for the compact a800 core. */
 #include "Atari.h"
 #include "Pokey.h"
 #include <SDL.h>
