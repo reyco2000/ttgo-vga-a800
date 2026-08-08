@@ -47,6 +47,8 @@ uint8_t Gtia_Read(Atari *a, uint16_t address) {
 void Gtia_Write(Atari *a, uint16_t address, uint8_t value) {
   unsigned r = address & 31;
   a->gtia[r] = value;
+  if (r >= 13 && r <= 17)
+    a->pm_latch[r == 17 ? 4 : r - 13] = value;
   if (r == 30)
     for (unsigned i = 0; i < 16; i++)
       a->gtia_collisions[i] = 0;

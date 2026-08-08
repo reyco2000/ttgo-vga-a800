@@ -18,7 +18,7 @@ useful as a compact core to read and extend.
   and VBI NMI
 - ANTIC display-list traversal, including monochrome, multicolor, and
   double-width character modes, plus approximate bitmap-mode rendering
-- scanline DLI scheduling with per-line GTIA color capture
+- scanline DLI scheduling with per-line ANTIC/GTIA register and PMG DMA capture
 - GTIA color registers, modes 9/10/11 for ANTIC mode F, console/trigger input,
   and an Atari-inspired palette
 - basic player/missile DMA or direct-GRAF rendering with positions, sizes,
@@ -38,6 +38,9 @@ modes, VDELAY, scrolling, serial SIO command
 transport at the POKEY bit level, cartridges, save states, and undocumented
 CPU instructions are not implemented. The SIOV acceleration lets
 the stock XL OS boot compatible ATR images without bit-level serial emulation.
+Playfield/display-list memory is still interpreted at the end of the frame,
+but scanline-sensitive color, character-base, and player/missile data is
+captured while the CPU runs so later writes do not alter earlier scanlines.
 
 ### Reference audit priorities
 

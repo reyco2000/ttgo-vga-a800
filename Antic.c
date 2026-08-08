@@ -24,6 +24,21 @@ void Antic_Write(Atari *a, uint16_t address, uint8_t value) {
   }
   a->antic[r] = value;
 }
+void Antic_CaptureLine(Atari *a) {
+  int y = a->scanline, one = (a->antic[0] & 0x10) != 0;
+  unsigned row = (unsigned)(one ? y : y / 2);
+  uint16_t base = (uint16_t)((a->antic[7] & (one ? 0xf8 : 0xfc)) << 8);
+  memcpy(a->line_antic[y], a->antic, sizeof(a->antic));
+  if (a->antic[0] & 8)
+    for (int p = 0; p < 4; p++)
+      a->pm_latch[p] = Atari_Read(
+          a, (uint16_t)(base + (one ? 0x400 + p * 0x100 : 0x200 + p * 0x80) +
+                        row));
+  if (a->antic[0] & 12)
+    a->pm_latch[4] =
+        Atari_Read(a, (uint16_t)(base + (one ? 0x300 : 0x180) + row));
+  memcpy(a->line_pmg[y], a->pm_latch, sizeof(a->pm_latch));
+}
 static int rows_for(int mode) {
   static const uint8_t n[16] = {1, 1, 8, 10, 8, 16, 8, 16,
                                 8, 4, 4, 2,  1, 2,  1, 1};
@@ -123,8 +138,8 @@ static void draw_mode(Atari *a, int mode, int y, int row, uint16_t mem,
   for (int b = 0; b < bytes; b++) {
     uint8_t d = Atari_Read(a, (uint16_t)(mem + b));
     if (mode == 2 || mode == 3) {
-      uint16_t ch =
-          (uint16_t)(((a->antic[9] & 0xfc) << 8) | ((d & 127) * 8) + (row & 7));
+      uint16_t ch = (uint16_t)(((a->line_antic[y][9] & 0xfc) << 8) |
+                               ((d & 127) * 8) + (row & 7));
       uint8_t bits = Atari_Read(a, ch);
       if (d & 128)
         bits ^= 255;
@@ -134,7 +149,7 @@ static void draw_mode(Atari *a, int mode, int y, int row, uint16_t mem,
                (bits & (128 >> k)) ? 4 : 0);
     } else if (mode == 4 || mode == 5) {
       int glyph_row = mode == 5 ? row / 2 : row;
-      uint16_t ch = (uint16_t)(((a->antic[9] & 0xfc) << 8) |
+      uint16_t ch = (uint16_t)(((a->line_antic[y][9] & 0xfc) << 8) |
                                ((d & 127) * 8) + (glyph_row & 7));
       uint8_t bits = Atari_Read(a, ch);
       for (int k = 0; k < 4; k++) {
@@ -146,7 +161,7 @@ static void draw_mode(Atari *a, int mode, int y, int row, uint16_t mem,
       }
     } else if (mode == 6 || mode == 7) {
       int glyph_row = mode == 7 ? row / 2 : row;
-      uint16_t ch = (uint16_t)(((a->antic[9] & 0xfe) << 8) |
+      uint16_t ch = (uint16_t)(((a->line_antic[y][9] & 0xfe) << 8) |
                                ((d & 63) * 8) + (glyph_row & 7));
       uint8_t bits = Atari_Read(a, ch);
       uint8_t ink = pf[d >> 6];
@@ -230,30 +245,17 @@ static void missile_pixel(Atari *a, int y, int x, int n, int m, uint8_t color) {
 static void draw_pmg(Atari *a, int y) {
   if (y < 8 || y >= 248)
     return;
-  uint8_t *g = a->line_gtia[y];
-  int one = (a->antic[0] & 0x10) != 0;
-  uint16_t base = (uint16_t)((a->antic[7] & (one ? 0xf8 : 0xfc)) << 8);
-  unsigned row = (unsigned)(one ? y : y / 2);
+  uint8_t *g = a->line_gtia[y], *pm = a->line_pmg[y];
   if (g[29] & 2)
     for (int p = 0; p < 4; p++) {
-      uint8_t bits = g[13 + p];
-      if (a->antic[0] & 8) {
-        uint16_t off =
-            (uint16_t)(base + (one ? 0x400 + p * 0x100 : 0x200 + p * 0x80) +
-                       row);
-        bits = Atari_Read(a, off);
-      }
+      uint8_t bits = pm[p];
       int s = pm_scale(g[8 + p]), x = (g[p] - 0x22) * 2 + 4;
       for (int b = 0; b < 8; b++)
         if (bits & (128 >> b))
           player_pixel(a, y, x + b * 2 * s, 2 * s, p, g[18 + p]);
     }
   if (g[29] & 1) {
-    uint8_t bits = g[17];
-    if (a->antic[0] & 12) {
-      uint16_t off = (uint16_t)(base + (one ? 0x300 : 0x180) + row);
-      bits = Atari_Read(a, off);
-    }
+    uint8_t bits = pm[4];
     for (int m = 0; m < 4; m++)
       if (bits & (2 << (m * 2))) {
         int s = pm_scale(g[12] >> (m * 2)), x = (g[4 + m] - 0x22) * 2 + 4;

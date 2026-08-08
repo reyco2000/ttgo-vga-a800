@@ -71,6 +71,7 @@ int main(void) {
   a.antic[2] = 0x00;
   a.antic[3] = 0x02;
   a.antic[9] = 0xe0;
+  a.line_antic[8][9] = 0xe0;
   a.gtia[23] = 0x4a;
   a.line_colors[8][1] = 0x4a;
   a.ram[0x200] = 0x47;
@@ -81,6 +82,7 @@ int main(void) {
   a.ram[0x205] = 0x02;
   a.ram[0x300] = 0x40;
   a.ram[0xe000] = 0x80;
+  a.antic[9] = 0;
   Antic_Frame(&a);
   assert(a.pixels[8 * A800_WIDTH + 32] == Gtia_Color(0x4a));
   memset(a.ram, 0, sizeof(a.ram));
@@ -101,7 +103,10 @@ int main(void) {
   a.line_gtia[40][0] = 0x80;
   a.line_gtia[40][18] = 0x4a;
   a.line_gtia[40][29] = 2;
+  a.scanline = 40;
   a.ram[0x3428] = 0x80;
+  Antic_CaptureLine(&a);
+  a.ram[0x3428] = 0;
   Antic_Frame(&a);
   assert(a.pixels[40 * A800_WIDTH + 192] == Gtia_Color(0x4a));
   memset(&a, 0, sizeof(a));
@@ -125,8 +130,8 @@ int main(void) {
   a.line_gtia[8][18] = 0x2a;
   a.line_gtia[8][19] = 0x4a;
   a.line_gtia[8][29] = 3;
-  a.ram[0x3308] = 2;
-  a.ram[0x3408] = a.ram[0x3508] = 0x80;
+  a.line_pmg[8][4] = 2;
+  a.line_pmg[8][0] = a.line_pmg[8][1] = 0x80;
   Antic_Frame(&a);
   assert(a.pixels[8 * A800_WIDTH + 32] == Gtia_Color(0x2a));
   assert(a.pixels[8 * A800_WIDTH + 33] == Gtia_Color(0x2a));
@@ -182,6 +187,7 @@ int main(void) {
   a.line_gtia[40][13] = 0x80;
   a.line_gtia[40][18] = 0x2a;
   a.line_gtia[40][29] = 2;
+  a.line_pmg[40][0] = 0x80;
   Antic_Frame(&a);
   assert(a.pixels[40 * A800_WIDTH + 192] == Gtia_Color(0x2a));
   return 0;

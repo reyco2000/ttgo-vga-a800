@@ -40,6 +40,7 @@ void Atari_Reset(Atari *a) {
   memset(a->antic, 0, sizeof(a->antic));
   memset(a->gtia, 0, sizeof(a->gtia));
   memset(a->gtia_collisions, 0, sizeof(a->gtia_collisions));
+  memset(a->pm_latch, 0, sizeof(a->pm_latch));
   memset(a->pokey, 0, sizeof(a->pokey));
   a->pokey_irqen = a->pokey_skctl = 0;
   a->pokey_irqst = a->pokey_skstat = 0xff;
@@ -114,6 +115,7 @@ void Atari_Frame(Atari *a) {
       a->line_cycles += n;
       Pokey_Advance(a, n);
     }
+    Antic_CaptureLine(a);
     memcpy(a->line_gtia[a->scanline], a->gtia, sizeof(a->gtia));
     for (int i = 0; i < 4; i++)
       a->line_colors[a->scanline][i] = a->gtia[22 + i];

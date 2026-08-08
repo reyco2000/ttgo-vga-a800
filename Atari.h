@@ -20,6 +20,8 @@ struct Atari {
   uint32_t pixels[A800_WIDTH * A800_MAX_HEIGHT];
   uint8_t line_colors[A800_MAX_HEIGHT][5];
   uint8_t line_gtia[A800_MAX_HEIGHT][32];
+  uint8_t line_antic[A800_MAX_HEIGHT][16];
+  uint8_t line_pmg[A800_MAX_HEIGHT][5], pm_latch[5];
   uint8_t dli_lines[A800_MAX_HEIGHT];
   uint8_t collision_map[A800_WIDTH * A800_MAX_HEIGHT];
   uint16_t pc;
