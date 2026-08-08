@@ -204,13 +204,16 @@ int main(int argc, char **argv) {
       SDL_RenderCopy(ren, tex, NULL, NULL);
       SDL_RenderPresent(ren);
     }
-    if (dev && SDL_GetQueuedAudioSize(dev) < 8192) {
+    if (dev) {
       int count = (int)(have.freq / a.frame_rate + .5);
       int16_t samples[1024];
       if (count > 1024)
         count = 1024;
-      Pokey_Audio(&a, samples, count, have.freq);
-      SDL_QueueAudio(dev, samples, (uint32_t)count * sizeof(*samples));
+      uint32_t chunk = (uint32_t)count * sizeof(*samples), target = chunk * 3;
+      while (SDL_GetQueuedAudioSize(dev) < target) {
+        Pokey_Audio(&a, samples, count, have.freq);
+        SDL_QueueAudio(dev, samples, chunk);
+      }
     }
     double elapsed = (double)(SDL_GetPerformanceCounter() - start) /
                      SDL_GetPerformanceFrequency(),

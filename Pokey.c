@@ -125,8 +125,14 @@ void Pokey_Audio(Atari *a, int16_t *out, int count, int rate) {
         if (ch == 3 && (a->pokey[8] & 2))
           a->audio_output[1] = 0;
       }
-      if (vol && ((ctl & 0x10) || a->audio_output[ch]))
-        sum += vol;
+      if (vol) {
+        if (ctl & 0x10)
+          sum += vol;
+        else if ((ctl & 0xa0) == 0xa0 && (double)a->cpu_hz / period >= rate)
+          sum += vol * .5;
+        else if (a->audio_output[ch])
+          sum += vol;
+      }
     }
     /* POKEY is a unipolar DAC; remove its DC component before SDL output. */
     double filtered = sum - a->audio_previous + 0.995 * a->audio_filter;

@@ -28,7 +28,7 @@ useful as a compact core to read and extend.
 - PIA joystick and PORTB registers
 - POKEY keyboard and random register; AUDCTL-aware 15/64/1790 kHz and joined
   timers; pure-tone, polynomial distortion/noise, high-pass, and volume-only
-  audio with DC filtering
+  audio with DC and ultrasonic-alias filtering
 - read-only ATR parsing, sector access, and an XL OS SIOV acceleration for
   disk status and reads
 - segmented XEX loading with ordered INITAD execution and RUNAD handoff after
@@ -40,7 +40,8 @@ cycle-exact; GTIA modes on character modes, precise scrolling fetch windows,
 serial SIO command transport at the POKEY bit level, cartridges, save states,
 and undocumented CPU instructions are not implemented. POKEY linked-low timer
 pulses, exact high-pass flip-flops, nonlinear DAC mixing, and sub-frame audio
-register changes remain approximations. The SIOV acceleration lets the stock
+register changes remain approximations. The SDL frontend maintains a small
+three-frame queue to avoid host-audio underruns. The SIOV acceleration lets the stock
 XL OS boot compatible ATR images without bit-level serial emulation.
 Display-list state, playfield data, colors, character-base, player/missile
 data, and collisions now advance one scanline at a time. Register changes

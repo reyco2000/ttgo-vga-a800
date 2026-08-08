@@ -84,6 +84,11 @@ int main(void) {
   for (int i = 1; i < 512; i++)
     changes += audio[i] != audio[i - 1];
   assert(changes > 10);
+  a.pokey[0] = 0;
+  a.pokey[1] = 0xa8;
+  int16_t ultrasonic[4096];
+  Pokey_Audio(&a, ultrasonic, 4096, 44100);
+  assert(ultrasonic[4095] < 100 && ultrasonic[4095] > -100);
   a.audio_phase[0] = .5;
   a.audio_output[0] = 1;
   Pokey_Write(&a, 0xd209, 0);

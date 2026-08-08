@@ -35,15 +35,16 @@ static int write_ppm(const Atari *a, const char *path) {
 static void usage(const char *name) {
   fprintf(stderr,
           "usage: %s [--pal|--ntsc] [--basic] [--frames N] [--xex-frame N] "
-          "[--output frame.ppm] [--os ROM] [--basic-rom ROM] "
-          "[media.atr|program.xex]\n",
+          "[--start-frame N] [--trace-audio] [--output frame.ppm] [--os ROM] "
+          "[--basic-rom ROM] [media.atr|program.xex]\n",
           name);
 }
 
 int main(int argc, char **argv) {
   const char *os = "ATARIXL.ROM", *basic_rom = "ATARIBAS.ROM", *media = NULL,
              *output = NULL;
-  int frames = 180, xex_frame = 76, basic = 0;
+  int frames = 180, xex_frame = 76, start_frame = -1, basic = 0,
+      trace_audio = 0;
   AtariVideoStandard standard = A800_NTSC;
   for (int i = 1; i < argc; i++) {
     if (!strcmp(argv[i], "--pal"))
@@ -56,6 +57,10 @@ int main(int argc, char **argv) {
       frames = atoi(argv[++i]);
     else if (!strcmp(argv[i], "--xex-frame") && i + 1 < argc)
       xex_frame = atoi(argv[++i]);
+    else if (!strcmp(argv[i], "--start-frame") && i + 1 < argc)
+      start_frame = atoi(argv[++i]);
+    else if (!strcmp(argv[i], "--trace-audio"))
+      trace_audio = 1;
     else if (!strcmp(argv[i], "--output") && i + 1 < argc)
       output = argv[++i];
     else if (!strcmp(argv[i], "--os") && i + 1 < argc)
@@ -87,7 +92,12 @@ int main(int argc, char **argv) {
     return 2;
   }
   int loaded = !xex;
+  uint8_t last_audio[9] = {0};
   for (int frame = 0; frame < frames; frame++) {
+    if (frame == start_frame)
+      a.console &= (uint8_t)~1;
+    if (frame == start_frame + 1)
+      a.console |= 1;
     Atari_Frame(&a);
     if (xex && !loaded && frame == xex_frame - 1) {
       if (Atari_LoadExecutable(&a, media)) {
@@ -96,6 +106,13 @@ int main(int argc, char **argv) {
         return 2;
       }
       loaded = 1;
+    }
+    if (trace_audio && memcmp(last_audio, a.pokey, 9)) {
+      printf("audio-frame=%d regs=%02x/%02x,%02x/%02x,%02x/%02x,%02x/%02x "
+             "ctl=%02x\n",
+             frame, a.pokey[0], a.pokey[1], a.pokey[2], a.pokey[3], a.pokey[4],
+             a.pokey[5], a.pokey[6], a.pokey[7], a.pokey[8]);
+      memcpy(last_audio, a.pokey, 9);
     }
   }
   uint32_t first = a.pixels[0];
