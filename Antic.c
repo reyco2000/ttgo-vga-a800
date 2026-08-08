@@ -41,29 +41,48 @@ static void span(Atari *a, int y, int x, int n, uint8_t c) {
   for (int i = 0; i < n; i++)
     a->pixels[y * A800_WIDTH + x + i] = Gtia_Color(c);
 }
+static int line_bytes(int mode, int width) {
+  if (mode == 6 || mode == 7)
+    return width == 3 ? 24 : width == 2 ? 20 : 16;
+  return width == 3 ? 48 : width == 2 ? 40 : 32;
+}
 static void draw_mode(Atari *a, int mode, int y, int row, uint16_t mem,
                       int width) {
-  int bytes = width == 3   ? 48
-              : width == 2 ? 40
-                           : 32,
-      scale = width == 3   ? 1
-              : width == 2 ? 1
-                           : 1,
+  int bytes = line_bytes(mode, width), scale = (mode == 6 || mode == 7) ? 2 : 1,
       x = (A800_WIDTH - bytes * 8 * scale) / 2;
   uint8_t bg = a->gtia[26],
           pf[4] = {a->gtia[22], a->gtia[23], a->gtia[24], a->gtia[25]};
   span(a, y, 0, A800_WIDTH, bg);
   for (int b = 0; b < bytes; b++) {
     uint8_t d = Atari_Read(a, (uint16_t)(mem + b));
-    if (mode >= 2 && mode <= 7) {
+    if (mode == 2 || mode == 3) {
       uint16_t ch =
           (uint16_t)(((a->antic[9] & 0xfc) << 8) | ((d & 127) * 8) + (row & 7));
       uint8_t bits = Atari_Read(a, ch);
       if (d & 128)
         bits ^= 255;
+      uint8_t paper = pf[2], ink = (uint8_t)((pf[2] & 0xf0) | (pf[1] & 0x0e));
+      for (int k = 0; k < 8; k++)
+        span(a, y, x + b * 8 + k, 1, (bits & (128 >> k)) ? ink : paper);
+    } else if (mode == 4 || mode == 5) {
+      int glyph_row = mode == 5 ? row / 2 : row;
+      uint16_t ch = (uint16_t)(((a->antic[9] & 0xfc) << 8) |
+                               ((d & 127) * 8) + (glyph_row & 7));
+      uint8_t bits = Atari_Read(a, ch);
+      for (int k = 0; k < 4; k++) {
+        unsigned v = (bits >> (6 - k * 2)) & 3;
+        uint8_t color = v ? (v == 3 && d & 128 ? pf[3] : pf[v - 1]) : bg;
+        span(a, y, x + b * 8 + k * 2, 2, color);
+      }
+    } else if (mode == 6 || mode == 7) {
+      int glyph_row = mode == 7 ? row / 2 : row;
+      uint16_t ch = (uint16_t)(((a->antic[9] & 0xfe) << 8) |
+                               ((d & 63) * 8) + (glyph_row & 7));
+      uint8_t bits = Atari_Read(a, ch);
+      uint8_t ink = pf[d >> 6];
       for (int k = 0; k < 8; k++)
         span(a, y, x + (b * 8 + k) * scale, scale,
-             (bits & (128 >> k)) ? pf[2] : bg);
+             (bits & (128 >> k)) ? ink : bg);
     } else if (mode == 8 || mode == 10 || mode == 13 || mode == 14) {
       for (int k = 0; k < 4; k++)
         span(a, y, x + (b * 8 + k * 2) * scale, 2 * scale,
@@ -105,6 +124,6 @@ void Antic_Frame(Atari *a) {
     }
     for (int r = 0; r < rows && y < a->frame_lines; r++, y++)
       draw_mode(a, mode, y, r, mem, width);
-    mem = (uint16_t)(mem + (width == 3 ? 48 : width == 2 ? 40 : 32));
+    mem = (uint16_t)(mem + line_bytes(mode, width));
   }
 }

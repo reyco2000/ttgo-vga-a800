@@ -16,7 +16,8 @@ useful as a compact core to read and extend.
 - selectable NTSC (default: 262 lines, 1.790 MHz, 59.92 Hz) or PAL (312
   lines, 1.773 MHz, 49.86 Hz) timing, WSYNC, VCOUNT, GTIA PAL identification,
   and VBI NMI
-- ANTIC display-list traversal and approximate text/bitmap mode rendering
+- ANTIC display-list traversal, including monochrome, multicolor, and
+  double-width character modes, plus approximate bitmap-mode rendering
 - GTIA color registers, console/trigger input, and an Atari-inspired palette
 - PIA joystick and PORTB registers
 - POKEY keyboard, random register, basic timer IRQs, and four-channel square

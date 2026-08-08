@@ -1,4 +1,5 @@
 #include "6502.h"
+#include "Antic.h"
 #include "Atari.h"
 #include "AtariIo.h"
 #include "Gtia.h"
@@ -56,5 +57,24 @@ int main(void) {
   a.ram[0x301] = 1;
   a.ram[0x302] = 0x52;
   assert(AtariIo_Sio(&a) == 0x8a);
+  memset(&a, 0, sizeof(a));
+  Atari_SetVideoStandard(&a, A800_NTSC);
+  a.pia[1] = 0;
+  a.pia_ddr[1] = 0xff;
+  a.antic[0] = 2;
+  a.antic[2] = 0x00;
+  a.antic[3] = 0x02;
+  a.antic[9] = 0xe0;
+  a.gtia[23] = 0x4a;
+  a.ram[0x200] = 0x47;
+  a.ram[0x201] = 0x00;
+  a.ram[0x202] = 0x03;
+  a.ram[0x203] = 0x41;
+  a.ram[0x204] = 0x00;
+  a.ram[0x205] = 0x02;
+  a.ram[0x300] = 0x40;
+  a.ram[0xe000] = 0x80;
+  Antic_Frame(&a);
+  assert(a.pixels[8 * A800_WIDTH + 32] == Gtia_Color(0x4a));
   return 0;
 }
