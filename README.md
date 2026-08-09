@@ -16,7 +16,7 @@ useful as a compact core to read and extend.
 - 64 KiB XL address space, OS/BASIC/self-test overlays, and PORTB banking
 - selectable NTSC (default: 262 lines, 1.790 MHz, 59.92 Hz) or PAL (312
   lines, 1.773 MHz, 49.86 Hz) timing, WSYNC, VCOUNT, GTIA PAL identification,
-  VBI NMI, memory-refresh cycles, practical ANTIC/PMG DMA stealing, and
+  VBI NMI, practical display-list/playfield/character/PMG DMA stealing, and
   cross-scanline accounting for instruction-boundary timing overruns
 - ANTIC display-list traversal, including monochrome, multicolor, and
   double-width character modes, CHACTL, practical HSCROL/VSCROL, and
@@ -65,9 +65,10 @@ The remaining priorities are:
 
 1. Refine CPU/ANTIC timing beyond the current scanline DMA budget and
    instruction-overrun carry;
-   page-crossing penalties, stable undocumented opcode families, memory
-   refresh, playfield/character/PMG steals, and master-clock advancement during
-   CPU pauses are implemented.
+   page-crossing penalties, stable undocumented opcode families,
+   playfield/character/PMG steals, and master-clock advancement during CPU
+   pauses are implemented. Memory-refresh steals are omitted until their fixed
+   within-scanline placement can be represented without distorting DLI timing.
 2. Refine POKEY serial timing and analog mixing beyond the current per-channel
    timer IRQs, cycle-timestamped writes, reference polynomial phases,
    joined-channel handling, high-pass latches, and compact nonlinear response.

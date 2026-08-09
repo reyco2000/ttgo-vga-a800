@@ -6,7 +6,7 @@
 
 typedef struct Atari Atari;
 
-enum { A800_WIDTH = 384, A800_MAX_HEIGHT = 312 };
+enum { A800_WIDTH = 384, A800_MAX_HEIGHT = 312, A800_XEX_BOOT_FRAMES = 85 };
 enum { A800_AUDIO_EVENTS = 2048 };
 typedef enum { A800_NTSC = 0, A800_PAL = 1 } AtariVideoStandard;
 typedef struct {

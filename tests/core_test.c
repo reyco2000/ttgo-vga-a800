@@ -259,7 +259,7 @@ int main(void) {
   Antic_BeginFrame(&a);
   Antic_BeginLine(&a, 8);
   assert(a.display_row == 3 && a.display_rows == 5);
-  assert(Antic_DmaCycles(&a) == 92);
+  assert(Antic_DmaCycles(&a) == 83);
   for (int line = 8; line < 13; line++) {
     if (line != 8)
       Antic_BeginLine(&a, line);

@@ -381,8 +381,7 @@ void Antic_BeginLine(Atari *a, int y) {
   }
 }
 int Antic_DmaCycles(const Atari *a) {
-  int cycles =
-      9 + a->display_dma_bytes; /* memory refresh and display-list bytes */
+  int cycles = a->display_dma_bytes; /* display-list bytes */
   if (a->antic[0] & 8)
     cycles += 4;
   if (a->antic[0] & 4)

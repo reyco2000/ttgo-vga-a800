@@ -191,7 +191,7 @@ int main(int argc, char **argv) {
         input(&a, &e, 0);
     }
     Atari_Frame(&a);
-    if (xex && ++boot_frames == 85) {
+    if (xex && ++boot_frames == A800_XEX_BOOT_FRAMES) {
       if (Atari_LoadExecutable(&a, xex))
         fprintf(stderr, "a800: cannot load executable %s\n", xex);
       else

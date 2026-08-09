@@ -43,8 +43,8 @@ static void usage(const char *name) {
 int main(int argc, char **argv) {
   const char *os = "ATARIXL.ROM", *basic_rom = "ATARIBAS.ROM", *media = NULL,
              *output = NULL;
-  int frames = 180, xex_frame = 85, start_frame = -1, basic = 0,
-      trace_audio = 0;
+  int frames = 180, xex_frame = A800_XEX_BOOT_FRAMES, start_frame = -1,
+      basic = 0, trace_audio = 0;
   double seconds = 0;
   AtariVideoStandard standard = A800_NTSC;
   for (int i = 1; i < argc; i++) {
