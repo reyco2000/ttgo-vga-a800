@@ -87,6 +87,7 @@ static void sbc(Atari *m, uint8_t v) {
     adc(m, (uint8_t)~v);
   nz(m, m->a);
 }
+#ifdef A800_UNDOCUMENTED_OPCODES
 static uint8_t asl(Atari *m, uint8_t v) {
   m->p = (uint8_t)((m->p & ~C) | (v >> 7));
   v <<= 1;
@@ -146,6 +147,7 @@ static void isc(Atari *m, uint16_t q) {
   wr(m, q, v);
   sbc(m, v);
 }
+#endif
 static void interrupt(Atari *m, uint16_t vector, int brk) {
   push(m, (uint8_t)(m->pc >> 8));
   push(m, (uint8_t)m->pc);
@@ -914,7 +916,9 @@ int Cpu_Step(Atari *m) {
     nz(m, m->x);
     break;
   case 0xe9:
+#ifdef A800_UNDOCUMENTED_OPCODES
   case 0xeb:
+#endif
     sbc(m, fetch(m));
     break;
   case 0xea:
@@ -976,6 +980,7 @@ int Cpu_Step(Atari *m) {
     }
     c = 7;
     break;
+#ifdef A800_UNDOCUMENTED_OPCODES
   case 0x03:
     slo(m, ix(m));
     c = 8;
@@ -1232,6 +1237,7 @@ int Cpu_Step(Atari *m) {
   case 0xda:
   case 0xfa:
     break;
+#endif
   default:
     break;
   }

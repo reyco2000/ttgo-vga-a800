@@ -90,6 +90,10 @@ cmake --build build-core
 ctest --test-dir build-core --output-on-failure
 ```
 
+Stable undocumented NMOS 6502 opcodes are enabled by default. They can be
+excluded for a strictly documented instruction set with
+`-DA800_UNDOCUMENTED_OPCODES=OFF`.
+
 ## Run
 
 Provide exact-size Atari XL ROM dumps (not included):

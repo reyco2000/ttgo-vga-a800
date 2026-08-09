@@ -35,6 +35,7 @@ int main(void) {
   a.ram[0x4fe] = 2;
   assert(Cpu_Step(&a) == 4);
   assert(a.pc == 0x501);
+#ifdef A800_UNDOCUMENTED_OPCODES
   a.pc = 0x500;
   a.ram[0x500] = 0xa7;
   a.ram[0x501] = 0x80;
@@ -77,6 +78,7 @@ int main(void) {
   a.ram[0x50c] = 0;
   assert(Cpu_Step(&a) == 5);
   assert(a.pc == 0x50d);
+#endif
   a.pia[1] = 1;
   a.pia_ddr[1] = 1;
   a.os[0x3ffc] = 0x34;
