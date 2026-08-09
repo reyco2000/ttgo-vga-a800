@@ -240,6 +240,16 @@ int main(void) {
   a.antic[2] = 0;
   a.antic[3] = 2;
   a.antic[5] = 3;
+  a.ram[0x200] = 0x70;
+  Antic_BeginFrame(&a);
+  Antic_BeginLine(&a, 8);
+  assert(a.display_rows == 8 && !a.display_vscroll_active);
+  memset(&a, 0, sizeof(a));
+  Atari_SetVideoStandard(&a, A800_NTSC);
+  a.antic[0] = 0x22;
+  a.antic[2] = 0;
+  a.antic[3] = 2;
+  a.antic[5] = 3;
   a.ram[0x200] = 0x62;
   a.ram[0x201] = 0;
   a.ram[0x202] = 3;

@@ -363,7 +363,7 @@ void Antic_BeginLine(Atari *a, int y) {
         a->display_list += 2;
         a->display_dma_bytes += 2;
       }
-      if (ins & 0x20) {
+      if (mode >= 2 && (ins & 0x20)) {
         if (!a->display_vscroll_active) {
           int skip = vscroll < rows ? vscroll : rows - 1;
           a->display_row = (uint8_t)skip;
