@@ -78,6 +78,35 @@ The remaining priorities are:
 Lower-priority subsystems such as cartridges, save states, and bit-level SIO
 should remain separate additions rather than enlarging the core preemptively.
 
+### Potential simplifications
+
+The following implemented features are candidates for simplification if a
+larger automated program corpus and focused hardware tests show no meaningful
+compatibility loss. They should not be removed based only on the current small
+sample set:
+
+- The timestamped POKEY audio-event ring could become a smaller fixed queue, or
+  frame-level register snapshots, if rapid register-write tests sound and hash
+  equivalently. This would reduce per-machine state and audio bookkeeping.
+- The compact nonlinear POKEY mixer could return to a linear sum if recorded
+  output comparisons show no useful improvement. Polynomial distortion,
+  joined timers, and DC filtering can remain independent of that choice.
+- Per-channel POKEY timer countdowns could use calculated absolute deadlines if
+  timer IRQ tests confirm identical STIMER, AUDCTL, and AUDF behavior.
+- Cross-scanline CPU overrun debt could be folded into the scanline DMA budget
+  if timing-sensitive display-list and interrupt tests do not distinguish it.
+- GTIA modes 9, 10, and 11 on ANTIC character modes 2/3 could be excluded behind
+  a build option if a broad software corpus never uses the combination.
+- Stable undocumented 6502 opcodes are already optional through
+  `A800_UNDOCUMENTED_OPCODES`; a strictly minimal build can disable them, and
+  they could eventually be removed if opcode tracing finds no users.
+
+Live display-list processing, display-list DMA gating, 4 KiB ANTIC wrapping,
+basic GTIA priority/collisions, and correct BASIC/XEX startup are not current
+simplification candidates because they fixed demonstrated behavior. Any
+simplification should be measured with `a800-validate`, targeted unit tests,
+screen comparisons, and audio traces before and after the change.
+
 ## Build
 
 Requirements: a C99 compiler, CMake 3.16+, and SDL2 development files.
