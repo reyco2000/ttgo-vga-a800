@@ -1,6 +1,6 @@
-/* Compact NMOS 6502 core written for a800. Decimal arithmetic and the JMP
- * indirect page-wrap quirk are implemented; undocumented opcodes act as NOPs.
- */
+/* Compact NMOS 6502 core written for a800. Decimal arithmetic, the JMP
+ * indirect page-wrap quirk, and the stable undocumented opcode families are
+ * implemented. */
 #include "6502.h"
 #include "AtariIo.h"
 
@@ -86,6 +86,65 @@ static void sbc(Atari *m, uint8_t v) {
   } else
     adc(m, (uint8_t)~v);
   nz(m, m->a);
+}
+static uint8_t asl(Atari *m, uint8_t v) {
+  m->p = (uint8_t)((m->p & ~C) | (v >> 7));
+  v <<= 1;
+  nz(m, v);
+  return v;
+}
+static uint8_t lsr(Atari *m, uint8_t v) {
+  m->p = (uint8_t)((m->p & ~C) | (v & 1));
+  v >>= 1;
+  nz(m, v);
+  return v;
+}
+static uint8_t rol(Atari *m, uint8_t v) {
+  uint8_t carry = m->p & C;
+  m->p = (uint8_t)((m->p & ~C) | (v >> 7));
+  v = (uint8_t)((v << 1) | carry);
+  nz(m, v);
+  return v;
+}
+static uint8_t ror(Atari *m, uint8_t v) {
+  uint8_t carry = (uint8_t)((m->p & C) << 7);
+  m->p = (uint8_t)((m->p & ~C) | (v & 1));
+  v = (uint8_t)((v >> 1) | carry);
+  nz(m, v);
+  return v;
+}
+static void slo(Atari *m, uint16_t q) {
+  uint8_t v = asl(m, rd(m, q));
+  wr(m, q, v);
+  m->a |= v;
+  nz(m, m->a);
+}
+static void rla(Atari *m, uint16_t q) {
+  uint8_t v = rol(m, rd(m, q));
+  wr(m, q, v);
+  m->a &= v;
+  nz(m, m->a);
+}
+static void sre(Atari *m, uint16_t q) {
+  uint8_t v = lsr(m, rd(m, q));
+  wr(m, q, v);
+  m->a ^= v;
+  nz(m, m->a);
+}
+static void rra(Atari *m, uint16_t q) {
+  uint8_t v = ror(m, rd(m, q));
+  wr(m, q, v);
+  adc(m, v);
+}
+static void dcp(Atari *m, uint16_t q) {
+  uint8_t v = (uint8_t)(rd(m, q) - 1);
+  wr(m, q, v);
+  cmp(m, m->a, v);
+}
+static void isc(Atari *m, uint16_t q) {
+  uint8_t v = (uint8_t)(rd(m, q) + 1);
+  wr(m, q, v);
+  sbc(m, v);
 }
 static void interrupt(Atari *m, uint16_t vector, int brk) {
   push(m, (uint8_t)(m->pc >> 8));
@@ -917,9 +976,263 @@ int Cpu_Step(Atari *m) {
     }
     c = 7;
     break;
-  default: /* stable two-byte NOP forms */
-    if ((op & 0x1f) == 0x04 || (op & 0x1f) == 0x14)
-      fetch(m);
+  case 0x03:
+    slo(m, ix(m));
+    c = 8;
+    break;
+  case 0x07:
+    slo(m, zp(m));
+    c = 5;
+    break;
+  case 0x0f:
+    slo(m, word(m));
+    c = 6;
+    break;
+  case 0x13:
+    slo(m, iy(m));
+    c = 8;
+    break;
+  case 0x17:
+    slo(m, zpx(m));
+    c = 6;
+    break;
+  case 0x1b:
+    slo(m, ay(m));
+    c = 7;
+    break;
+  case 0x1f:
+    slo(m, ax(m));
+    c = 7;
+    break;
+  case 0x23:
+    rla(m, ix(m));
+    c = 8;
+    break;
+  case 0x27:
+    rla(m, zp(m));
+    c = 5;
+    break;
+  case 0x2f:
+    rla(m, word(m));
+    c = 6;
+    break;
+  case 0x33:
+    rla(m, iy(m));
+    c = 8;
+    break;
+  case 0x37:
+    rla(m, zpx(m));
+    c = 6;
+    break;
+  case 0x3b:
+    rla(m, ay(m));
+    c = 7;
+    break;
+  case 0x3f:
+    rla(m, ax(m));
+    c = 7;
+    break;
+  case 0x43:
+    sre(m, ix(m));
+    c = 8;
+    break;
+  case 0x47:
+    sre(m, zp(m));
+    c = 5;
+    break;
+  case 0x4f:
+    sre(m, word(m));
+    c = 6;
+    break;
+  case 0x53:
+    sre(m, iy(m));
+    c = 8;
+    break;
+  case 0x57:
+    sre(m, zpx(m));
+    c = 6;
+    break;
+  case 0x5b:
+    sre(m, ay(m));
+    c = 7;
+    break;
+  case 0x5f:
+    sre(m, ax(m));
+    c = 7;
+    break;
+  case 0x63:
+    rra(m, ix(m));
+    c = 8;
+    break;
+  case 0x67:
+    rra(m, zp(m));
+    c = 5;
+    break;
+  case 0x6f:
+    rra(m, word(m));
+    c = 6;
+    break;
+  case 0x73:
+    rra(m, iy(m));
+    c = 8;
+    break;
+  case 0x77:
+    rra(m, zpx(m));
+    c = 6;
+    break;
+  case 0x7b:
+    rra(m, ay(m));
+    c = 7;
+    break;
+  case 0x7f:
+    rra(m, ax(m));
+    c = 7;
+    break;
+  case 0x83:
+    STORE(m->a & m->x, ix(m));
+    c = 6;
+    break;
+  case 0x87:
+    STORE(m->a & m->x, zp(m));
+    c = 3;
+    break;
+  case 0x8f:
+    STORE(m->a & m->x, word(m));
+    c = 4;
+    break;
+  case 0x97:
+    STORE(m->a & m->x, zpy(m));
+    c = 4;
+    break;
+  case 0xa3:
+    m->a = m->x = rd(m, ix(m));
+    nz(m, m->a);
+    c = 6;
+    break;
+  case 0xa7:
+    m->a = m->x = rd(m, zp(m));
+    nz(m, m->a);
+    c = 3;
+    break;
+  case 0xaf:
+    m->a = m->x = rd(m, word(m));
+    nz(m, m->a);
+    c = 4;
+    break;
+  case 0xb3:
+    c = 5;
+    m->a = m->x = rd(m, iyr(m, &c));
+    nz(m, m->a);
+    break;
+  case 0xb7:
+    m->a = m->x = rd(m, zpy(m));
+    nz(m, m->a);
+    c = 4;
+    break;
+  case 0xbf:
+    c = 4;
+    m->a = m->x = rd(m, ayr(m, &c));
+    nz(m, m->a);
+    break;
+  case 0xc3:
+    dcp(m, ix(m));
+    c = 8;
+    break;
+  case 0xc7:
+    dcp(m, zp(m));
+    c = 5;
+    break;
+  case 0xcf:
+    dcp(m, word(m));
+    c = 6;
+    break;
+  case 0xd3:
+    dcp(m, iy(m));
+    c = 8;
+    break;
+  case 0xd7:
+    dcp(m, zpx(m));
+    c = 6;
+    break;
+  case 0xdb:
+    dcp(m, ay(m));
+    c = 7;
+    break;
+  case 0xdf:
+    dcp(m, ax(m));
+    c = 7;
+    break;
+  case 0xe3:
+    isc(m, ix(m));
+    c = 8;
+    break;
+  case 0xe7:
+    isc(m, zp(m));
+    c = 5;
+    break;
+  case 0xef:
+    isc(m, word(m));
+    c = 6;
+    break;
+  case 0xf3:
+    isc(m, iy(m));
+    c = 8;
+    break;
+  case 0xf7:
+    isc(m, zpx(m));
+    c = 6;
+    break;
+  case 0xfb:
+    isc(m, ay(m));
+    c = 7;
+    break;
+  case 0xff:
+    isc(m, ax(m));
+    c = 7;
+    break;
+  case 0x04:
+  case 0x44:
+  case 0x64:
+    fetch(m);
+    c = 3;
+    break;
+  case 0x14:
+  case 0x34:
+  case 0x54:
+  case 0x74:
+  case 0xd4:
+  case 0xf4:
+    fetch(m);
+    c = 4;
+    break;
+  case 0x0c:
+    word(m);
+    c = 4;
+    break;
+  case 0x1c:
+  case 0x3c:
+  case 0x5c:
+  case 0x7c:
+  case 0xdc:
+  case 0xfc:
+    c = 4;
+    (void)axr(m, &c);
+    break;
+  case 0x80:
+  case 0x82:
+  case 0x89:
+  case 0xc2:
+  case 0xe2:
+    fetch(m);
+    break;
+  case 0x1a:
+  case 0x3a:
+  case 0x5a:
+  case 0x7a:
+  case 0xda:
+  case 0xfa:
+    break;
+  default:
     break;
   }
   m->cycles += (unsigned)c;

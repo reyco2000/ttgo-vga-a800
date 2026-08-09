@@ -104,24 +104,27 @@ void Atari_Write(Atari *a, uint16_t p, uint8_t v) {
   a->ram[p] = v;
 }
 void Atari_Frame(Atari *a) {
-  Antic_ScheduleDlis(a);
   Antic_BeginFrame(a);
   for (a->scanline = 0; a->scanline < a->frame_lines; a->scanline++) {
     a->line_cycles = 0;
-    if (a->dli_lines[a->scanline]) {
-      a->antic[15] = (uint8_t)((a->antic[15] & ~0x40) | 0x80);
-      if (a->antic[14] & 0x80)
-        a->nmi = 1;
-    }
+    uint64_t line_start = a->cycles;
+    Antic_BeginLine(a, a->scanline);
     if (a->scanline == 248) {
       a->antic[15] = (uint8_t)((a->antic[15] & ~0x80) | 0x40);
       if (a->antic[14] & 0x40)
         a->nmi = 1;
     }
-    while (a->line_cycles < 114) {
+    int cpu_limit = 114 - Antic_DmaCycles(a);
+    while (a->line_cycles < cpu_limit) {
       int n = Cpu_Step(a);
       a->line_cycles += n;
       Pokey_Advance(a, n);
+    }
+    unsigned elapsed = (unsigned)(a->cycles - line_start);
+    if (elapsed < 114) {
+      unsigned idle = 114 - elapsed;
+      a->cycles += idle;
+      Pokey_Advance(a, (int)idle);
     }
     Antic_CaptureLine(a);
     memcpy(a->line_gtia[a->scanline], a->gtia, sizeof(a->gtia));

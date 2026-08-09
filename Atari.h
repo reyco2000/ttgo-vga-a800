@@ -22,11 +22,11 @@ struct Atari {
   uint8_t line_gtia[A800_MAX_HEIGHT][32];
   uint8_t line_antic[A800_MAX_HEIGHT][16];
   uint8_t line_pmg[A800_MAX_HEIGHT][5], pm_latch[5];
-  uint8_t dli_lines[A800_MAX_HEIGHT];
   uint16_t collision_map[A800_WIDTH * A800_MAX_HEIGHT];
   uint16_t display_list, screen_memory;
   uint8_t display_mode, display_row, display_rows, display_width,
-      display_scroll, display_stopped;
+      display_scroll, display_dli, display_vscroll_active, display_stopped;
+  uint8_t display_dma_bytes;
   uint16_t pc;
   uint8_t a, x, y, s, p;
   uint64_t cycles;

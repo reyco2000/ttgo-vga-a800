@@ -10,12 +10,13 @@ useful as a compact core to read and extend.
 
 ## Implemented
 
-- NMOS 6502 official instruction set, decimal mode, interrupts, and indirect
-  JMP page-wrap behavior (unknown/illegal opcodes currently behave as NOPs)
+- NMOS 6502 official instruction set, decimal mode, interrupts, indirect JMP
+  page-wrap behavior, stable undocumented read/modify/write and load/store
+  families, and undocumented NOP encodings
 - 64 KiB XL address space, OS/BASIC/self-test overlays, and PORTB banking
 - selectable NTSC (default: 262 lines, 1.790 MHz, 59.92 Hz) or PAL (312
   lines, 1.773 MHz, 49.86 Hz) timing, WSYNC, VCOUNT, GTIA PAL identification,
-  and VBI NMI
+  VBI NMI, memory-refresh cycles, and practical ANTIC/PMG DMA stealing
 - ANTIC display-list traversal, including monochrome, multicolor, and
   double-width character modes, CHACTL, practical HSCROL/VSCROL, and
   approximate bitmap-mode rendering
@@ -36,9 +37,9 @@ useful as a compact core to read and extend.
 - SDL2 video, audio, keyboard, joystick-key, and console-key frontend
 
 Important current limits: ANTIC/GTIA are scanline approximations rather than
-cycle-exact; GTIA modes on character modes, precise scrolling fetch windows,
+cycle-exact; precise scrolling fetch windows,
 serial SIO command transport at the POKEY bit level, cartridges, save states,
-and undocumented CPU instructions are not implemented. POKEY linked-low timer
+and unstable undocumented CPU instructions are not implemented. POKEY linked-low timer
 pulses, exact high-pass flip-flops, nonlinear DAC mixing, and sub-frame audio
 register changes remain approximations. The SDL frontend maintains a small
 three-frame queue to avoid host-audio underruns. The SIOV acceleration lets the stock
@@ -50,16 +51,22 @@ within a scanline are still approximated at its ending boundary.
 ### Reference audit priorities
 
 A focused comparison with Atari800, A8E, and the local hardware reference
-identified these next compatibility improvements while retaining the flat,
-small implementation:
+identified compatibility improvements while retaining the flat, small
+implementation. The ANTIC pass now honors display-list DMA enable, advances
+the display list live rather than predicting DLI lines at frame start, wraps
+playfield DMA within 4 KiB, promotes and clips horizontal-scroll fetches,
+handles vertical-scroll entry and exit rows, and applies GTIA modes 9, 10, and
+11 to ANTIC character modes 2/3 as well as mode F.
 
-1. Refine HSCROL fetch promotion/clipping and VSCROL entry/exit row counts,
-   then extend GTIA modes 9, 10, and 11 from ANTIC mode F to modes 2/3.
-2. Improve CPU cycle counts (especially page crossings and DMA steals) and add
-   the stable undocumented opcodes used by software.
-3. Refine POKEY linked-low counter pulses, polynomial phase, high-pass
+The remaining priorities are:
+
+1. Refine CPU/ANTIC timing beyond the current scanline DMA budget;
+   page-crossing penalties, stable undocumented opcode families, memory
+   refresh, playfield/character/PMG steals, and master-clock advancement during
+   CPU pauses are implemented.
+2. Refine POKEY linked-low counter pulses, polynomial phase, high-pass
    flip-flops, nonlinear mixing, and sub-frame register-write timing.
-4. Model same-scanline player/missile repositioning and shift-register
+3. Model same-scanline player/missile repositioning and shift-register
    retrigger behavior only where software compatibility demonstrates a need.
 
 Lower-priority subsystems such as cartridges, save states, and bit-level SIO
@@ -154,7 +161,7 @@ for invalid arguments or ROM/media/output errors. A completed capture returns
 1 when every framebuffer pixel has the same color and 0 when the frame contains
 more than one color, making the command directly usable in automated program
 smoke tests. When the frame is blank (a single color), a file requested with
-`--output` is not written. `--xex-frame N` overrides the default frame-76 XEX handoff;
+`--output` is not written. `--xex-frame N` overrides the default frame-85 XEX handoff;
 `--start-frame N` presses START for one frame; and `--trace-audio` reports POKEY
 register changes.
 
