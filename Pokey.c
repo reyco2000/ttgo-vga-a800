@@ -1,24 +1,48 @@
 #include "Pokey.h"
 #include <string.h>
 
-static unsigned timer_period(const Atari *a, int ch) {
-  uint8_t ctl = a->pokey[8];
+static unsigned period(const uint8_t *r, int ch) {
+  uint8_t ctl = r[8];
   unsigned base = (ctl & 1) ? 114u : 28u;
   if (ch == 1 && (ctl & 0x10)) {
-    unsigned n = a->pokey[0] | (unsigned)a->pokey[2] << 8;
+    unsigned n = r[0] | (unsigned)r[2] << 8;
     return (ctl & 0x40) ? n + 7u : (n + 1u) * base;
   }
   if (ch == 3 && (ctl & 8)) {
-    unsigned n = a->pokey[4] | (unsigned)a->pokey[6] << 8;
+    unsigned n = r[4] | (unsigned)r[6] << 8;
     return (ctl & 0x20) ? n + 7u : (n + 1u) * base;
   }
   if ((ch == 0 && (ctl & 0x40)) || (ch == 2 && (ctl & 0x20)))
-    return (unsigned)a->pokey[ch * 2] + 4u;
-  return ((unsigned)a->pokey[ch * 2] + 1u) * base;
+    return (unsigned)r[ch * 2] + 4u;
+  return ((unsigned)r[ch * 2] + 1u) * base;
 }
-static uint32_t lfsr(uint32_t s, unsigned bits, unsigned tap) {
-  uint32_t b = (s ^ (s >> tap)) & 1u;
-  return (s >> 1) | (b << (bits - 1));
+static unsigned timer_period(const Atari *a, int ch) {
+  return period(a->pokey, ch);
+}
+static void poly_step(Atari *a) {
+  uint32_t p = a->audio_poly4 & 15u,
+           b = (uint32_t)(~((p >> 2) ^ (p >> 3)) & 1u);
+  a->audio_poly4 = ((p << 1) | b) & 15u;
+  p = a->audio_poly5 & 31u;
+  b = (uint32_t)(~((p >> 2) ^ (p >> 4)) & 1u);
+  a->audio_poly5 = ((p << 1) | b) & 31u;
+  p = a->audio_poly9 & 0x1ffu;
+  b = (p ^ (p >> 5)) & 1u;
+  a->audio_poly9 = (p >> 1) | (b << 8);
+  p = a->audio_poly17 & 0x1ffffu;
+  b = ((p >> 8) ^ (p >> 13)) & 1u;
+  uint32_t old = p & 1u;
+  p >>= 1;
+  p = (p & 0xff7fu) | (b << 7);
+  a->audio_poly17 = (p & 0xffffu) | (old << 16);
+}
+static void audio_event(Atari *a, uint8_t reg, uint8_t value) {
+  unsigned next = (a->audio_event_write + 1) % A800_AUDIO_EVENTS;
+  if (next == a->audio_event_read)
+    a->audio_event_read = (a->audio_event_read + 1) % A800_AUDIO_EVENTS;
+  a->audio_events[a->audio_event_write] =
+      (AtariAudioEvent){a->cycles, reg, value};
+  a->audio_event_write = next;
 }
 
 uint8_t Pokey_Read(Atari *a, uint16_t address) {
@@ -51,21 +75,17 @@ void Pokey_Write(Atari *a, uint16_t address, uint8_t value) {
   }
   if (r == 15) {
     a->pokey_skctl = value;
-    if (!(value & 3)) {
-      a->audio_poly4 = a->audio_poly5 = a->audio_poly9 = a->audio_poly17 = 1;
-      memset(a->audio_output, 0, sizeof(a->audio_output));
-    }
+    audio_event(a, 15, value);
     return;
   }
   if (r == 9) {
-    for (int i = 0; i < 4; i++) {
-      a->audio_phase[i] = 0;
-      a->audio_output[i] = 0;
-    }
+    audio_event(a, 9, value);
     a->pokey_timer_base = a->cycles;
     return;
   }
   a->pokey[r] = value;
+  if (r <= 8)
+    audio_event(a, (uint8_t)r, value);
   if (r == 10)
     a->pokey_skstat |= 0xe0;
 }
@@ -91,49 +111,83 @@ void Pokey_Audio(Atari *a, int16_t *out, int count, int rate) {
     a->audio_poly9 = 1;
     a->audio_poly17 = 1;
   }
+  if (!a->audio_started) {
+    a->audio_started = 1;
+    a->audio_skctl = a->pokey_skctl;
+    if (a->audio_event_read == a->audio_event_write)
+      memcpy(a->audio_regs, a->pokey, 9);
+  }
   for (int n = 0; n < count; n++) {
     double sum = 0;
+    a->audio_render_cycle += (double)a->cpu_hz / rate;
+    while (a->audio_event_read != a->audio_event_write &&
+           a->audio_events[a->audio_event_read].cycle <=
+               a->audio_render_cycle) {
+      AtariAudioEvent e = a->audio_events[a->audio_event_read];
+      a->audio_event_read = (a->audio_event_read + 1) % A800_AUDIO_EVENTS;
+      if (e.reg < 9)
+        a->audio_regs[e.reg] = e.value;
+      else if (e.reg == 9) {
+        memset(a->audio_phase, 0, sizeof(a->audio_phase));
+        memset(a->audio_output, 0, sizeof(a->audio_output));
+        memset(a->audio_hp, 0, sizeof(a->audio_hp));
+      } else {
+        a->audio_skctl = e.value;
+        if (!(e.value & 3)) {
+          a->audio_poly4 = a->audio_poly5 = a->audio_poly9 = a->audio_poly17 =
+              1;
+          memset(a->audio_output, 0, sizeof(a->audio_output));
+          memset(a->audio_hp, 0, sizeof(a->audio_hp));
+        }
+      }
+    }
     a->audio_poly_phase += (double)a->cpu_hz / rate;
     while (a->audio_poly_phase >= 1) {
       a->audio_poly_phase -= 1;
-      a->audio_poly4 = lfsr(a->audio_poly4, 4, 1);
-      a->audio_poly5 = lfsr(a->audio_poly5, 5, 2);
-      a->audio_poly9 = lfsr(a->audio_poly9, 9, 5);
-      a->audio_poly17 = lfsr(a->audio_poly17, 17, 5);
+      if (a->audio_skctl & 3)
+        poly_step(a);
     }
     for (int ch = 0; ch < 4; ch++) {
-      uint8_t ctl = a->pokey[ch * 2 + 1];
+      uint8_t ctl = a->audio_regs[ch * 2 + 1];
       int vol = ctl & 15;
-      unsigned period = timer_period(a, ch);
-      a->audio_phase[ch] += (double)a->cpu_hz / (period * rate);
+      unsigned divisor = period(a->audio_regs, ch);
+      a->audio_phase[ch] += (double)a->cpu_hz / (divisor * rate);
+      int joined_low = (ch == 0 && (a->audio_regs[8] & 0x10)) ||
+                       (ch == 2 && (a->audio_regs[8] & 8));
       while (a->audio_phase[ch] >= 1) {
         a->audio_phase[ch] -= 1;
+        if (joined_low || !(a->audio_skctl & 3))
+          continue;
         int clock = (ctl & 0x80) || (a->audio_poly5 & 1);
         if (clock) {
           if (ctl & 0x20)
             a->audio_output[ch] ^= 1;
           else
             a->audio_output[ch] =
-                (uint8_t)(((ctl & 0x40)
-                               ? a->audio_poly4
-                               : ((a->pokey[8] & 0x80) ? a->audio_poly9
-                                                       : a->audio_poly17)) &
+                (uint8_t)(((ctl & 0x40) ? a->audio_poly4
+                                        : ((a->audio_regs[8] & 0x80)
+                                               ? a->audio_poly9
+                                               : a->audio_poly17)) &
                           1);
         }
-        if (ch == 2 && (a->pokey[8] & 4))
-          a->audio_output[0] = 0;
-        if (ch == 3 && (a->pokey[8] & 2))
-          a->audio_output[1] = 0;
+        if (ch == 2 && (a->audio_regs[8] & 4))
+          a->audio_hp[0] = a->audio_output[0];
+        if (ch == 3 && (a->audio_regs[8] & 2))
+          a->audio_hp[1] = a->audio_output[1];
       }
+      int signal = joined_low ? 0 : a->audio_output[ch];
+      if (ch < 2 && ((a->audio_regs[8] >> (2 - ch)) & 1))
+        signal ^= a->audio_hp[ch];
       if (vol) {
         if (ctl & 0x10)
           sum += vol;
-        else if ((ctl & 0xa0) == 0xa0 && (double)a->cpu_hz / period >= rate)
+        else if ((ctl & 0xa0) == 0xa0 && (double)a->cpu_hz / divisor >= rate)
           sum += vol * .5;
-        else if (a->audio_output[ch])
+        else if (signal)
           sum += vol;
       }
     }
+    sum = 60.0 * sum / (sum + 18.0);
     /* POKEY is a unipolar DAC; remove its DC component before SDL output. */
     double filtered = sum - a->audio_previous + 0.995 * a->audio_filter;
     a->audio_previous = sum;

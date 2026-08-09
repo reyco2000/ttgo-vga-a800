@@ -28,8 +28,9 @@ useful as a compact core to read and extend.
   latches, HITCLR, and latched joystick triggers
 - PIA joystick and PORTB registers
 - POKEY keyboard and random register; AUDCTL-aware 15/64/1790 kHz and joined
-  timers; pure-tone, polynomial distortion/noise, high-pass, and volume-only
-  audio with DC and ultrasonic-alias filtering
+  timers; cycle-timestamped register writes; pure-tone, reference-tap
+  polynomial distortion/noise, latched high-pass, volume-only audio, compact
+  nonlinear mixing, and DC and ultrasonic-alias filtering
 - read-only ATR parsing, sector access, and an XL OS SIOV acceleration for
   disk status and reads
 - segmented XEX loading with ordered INITAD execution and RUNAD handoff after
@@ -39,9 +40,9 @@ useful as a compact core to read and extend.
 Important current limits: ANTIC/GTIA are scanline approximations rather than
 cycle-exact; precise scrolling fetch windows,
 serial SIO command transport at the POKEY bit level, cartridges, save states,
-and unstable undocumented CPU instructions are not implemented. POKEY linked-low timer
-pulses, exact high-pass flip-flops, nonlinear DAC mixing, and sub-frame audio
-register changes remain approximations. The SDL frontend maintains a small
+and unstable undocumented CPU instructions are not implemented. POKEY timer
+IRQ edge cases, analog-accurate DAC mixing, and writes within one output-sample
+interval remain approximations. The SDL frontend maintains a small
 three-frame queue to avoid host-audio underruns. The SIOV acceleration lets the stock
 XL OS boot compatible ATR images without bit-level serial emulation.
 Display-list state, playfield data, colors, character-base, player/missile
@@ -64,10 +65,12 @@ The remaining priorities are:
    page-crossing penalties, stable undocumented opcode families, memory
    refresh, playfield/character/PMG steals, and master-clock advancement during
    CPU pauses are implemented.
-2. Refine POKEY linked-low counter pulses, polynomial phase, high-pass
-   flip-flops, nonlinear mixing, and sub-frame register-write timing.
+2. Refine POKEY timer IRQ edge cases and analog mixing beyond the current
+   cycle-timestamped writes, reference polynomial phases, joined-channel
+   handling, high-pass latches, and compact nonlinear response.
 3. Model same-scanline player/missile repositioning and shift-register
-   retrigger behavior only where software compatibility demonstrates a need.
+   retrigger behavior only when a compatibility test demonstrates a need; the
+   current sample set does not justify a raster-event subsystem yet.
 
 Lower-priority subsystems such as cartridges, save states, and bit-level SIO
 should remain separate additions rather than enlarging the core preemptively.

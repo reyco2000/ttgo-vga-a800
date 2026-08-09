@@ -7,7 +7,12 @@
 typedef struct Atari Atari;
 
 enum { A800_WIDTH = 384, A800_MAX_HEIGHT = 312 };
+enum { A800_AUDIO_EVENTS = 2048 };
 typedef enum { A800_NTSC = 0, A800_PAL = 1 } AtariVideoStandard;
+typedef struct {
+  uint64_t cycle;
+  uint8_t reg, value;
+} AtariAudioEvent;
 
 struct Atari {
   uint8_t ram[65536];
@@ -42,7 +47,11 @@ struct Atari {
   double audio_phase[4];
   double audio_poly_phase, audio_previous, audio_filter;
   uint32_t audio_poly4, audio_poly5, audio_poly9, audio_poly17;
-  uint8_t audio_output[4];
+  uint8_t audio_output[4], audio_regs[9], audio_hp[2], audio_skctl,
+      audio_started;
+  AtariAudioEvent audio_events[A800_AUDIO_EVENTS];
+  unsigned audio_event_read, audio_event_write;
+  double audio_render_cycle;
   uint64_t pokey_timer_base;
   uint8_t *disk;
   size_t disk_size;
