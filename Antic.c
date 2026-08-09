@@ -303,11 +303,14 @@ static void draw_pmg(Atari *a, int y) {
     }
   if (g[29] & 1) {
     uint8_t bits = pm[4];
-    for (int m = 0; m < 4; m++)
-      if (bits & (2 << (m * 2))) {
-        int s = pm_scale(g[12] >> (m * 2)), x = (g[4 + m] - 0x22) * 2 + 4;
+    for (int m = 0; m < 4; m++) {
+      unsigned pair = (bits >> (m * 2)) & 3;
+      int s = pm_scale(g[12] >> (m * 2)), x = (g[4 + m] - 0x22) * 2 + 4;
+      if (pair & 2)
         missile_pixel(a, y, x, 2 * s, m);
-      }
+      if (pair & 1)
+        missile_pixel(a, y, x + 2 * s, 2 * s, m);
+    }
   }
 }
 void Antic_BeginFrame(Atari *a) {

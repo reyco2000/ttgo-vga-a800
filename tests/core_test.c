@@ -218,12 +218,12 @@ int main(void) {
   a.line_gtia[8][18] = 0x2a;
   a.line_gtia[8][19] = 0x4a;
   a.line_gtia[8][29] = 3;
-  a.line_pmg[8][4] = 2;
+  a.line_pmg[8][4] = 3;
   a.line_pmg[8][0] = a.line_pmg[8][1] = 0x80;
   Antic_Frame(&a);
   assert(a.pixels[8 * A800_WIDTH + 32] == Gtia_Color(0x6a));
-  assert(a.pixels[8 * A800_WIDTH + 33] == Gtia_Color(0x6a));
-  assert(a.pixels[8 * A800_WIDTH + 34] == Gtia_Color(0x4a));
+  assert(a.pixels[8 * A800_WIDTH + 35] == Gtia_Color(0x6a));
+  assert(a.pixels[8 * A800_WIDTH + 36] == Gtia_Color(0));
   a.line_gtia[8][27] = 1;
   Antic_Frame(&a);
   assert(a.pixels[8 * A800_WIDTH + 32] == Gtia_Color(0x2a));

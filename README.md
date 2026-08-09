@@ -23,7 +23,7 @@ useful as a compact core to read and extend.
 - GTIA color registers, modes 9/10/11 for ANTIC mode F, console/trigger input,
   and an Atari-inspired palette
 - basic player/missile DMA or direct-GRAF rendering with positions, sizes,
-  VDELAY, fifth-player and multicolor priority mixing, sticky collision
+  two-bit missile shifters, VDELAY, fifth-player and multicolor priority mixing, sticky collision
   latches, HITCLR, and latched joystick triggers
 - PIA joystick and PORTB registers
 - POKEY keyboard and random register; AUDCTL-aware 15/64/1790 kHz and joined

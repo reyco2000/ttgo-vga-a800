@@ -136,6 +136,11 @@ int main(int argc, char **argv) {
          "gractl=%02x\n",
          a.gtia[22], a.gtia[23], a.gtia[24], a.gtia[25], a.gtia[26], a.gtia[27],
          a.gtia[29]);
+  printf("pmg hpos=%02x,%02x,%02x,%02x missiles=%02x,%02x,%02x,%02x "
+         "sizes=%02x,%02x,%02x,%02x/%02x colors=%02x,%02x,%02x,%02x\n",
+         a.gtia[0], a.gtia[1], a.gtia[2], a.gtia[3], a.gtia[4], a.gtia[5],
+         a.gtia[6], a.gtia[7], a.gtia[8], a.gtia[9], a.gtia[10], a.gtia[11],
+         a.gtia[12], a.gtia[18], a.gtia[19], a.gtia[20], a.gtia[21]);
   printf("collisions m-pf=%02x,%02x,%02x,%02x p-pf=%02x,%02x,%02x,%02x "
          "m-pl=%02x,%02x,%02x,%02x p-pl=%02x,%02x,%02x,%02x\n",
          a.gtia_collisions[0], a.gtia_collisions[1], a.gtia_collisions[2],
