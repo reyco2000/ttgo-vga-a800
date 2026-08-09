@@ -36,6 +36,26 @@ static void poly_step(Atari *a) {
   p = (p & 0xff7fu) | (b << 7);
   a->audio_poly17 = (p & 0xffffu) | (old << 16);
 }
+static void random_step(Atari *a) {
+  uint32_t p = a->pokey_random_poly9 & 0x1ffu, b = (p ^ (p >> 5)) & 1u;
+  a->pokey_random_poly9 = (p >> 1) | (b << 8);
+  p = a->rng & 0x1ffffu;
+  b = ((p >> 8) ^ (p >> 13)) & 1u;
+  uint32_t old = p & 1u;
+  p >>= 1;
+  p = (p & 0xff7fu) | (b << 7);
+  a->rng = (p & 0xffffu) | (old << 16);
+}
+static uint8_t random_read(Atari *a) {
+  if (a->pokey_skctl & 3) {
+    uint64_t elapsed = a->cycles - a->pokey_random_cycle;
+    while (elapsed--)
+      random_step(a);
+    a->pokey_random_cycle = a->cycles;
+  }
+  return (uint8_t)(((a->pokey[8] & 0x80) ? a->pokey_random_poly9 : a->rng) &
+                   0xff);
+}
 static void audio_event(Atari *a, uint8_t reg, uint8_t value) {
   unsigned next = (a->audio_event_write + 1) % A800_AUDIO_EVENTS;
   if (next == a->audio_event_read)
@@ -53,10 +73,8 @@ uint8_t Pokey_Read(Atari *a, uint16_t address) {
     return 0xff;
   if (r == 9)
     return a->keycode;
-  if (r == 10) {
-    a->rng = a->rng * 1103515245u + 12345u;
-    return (uint8_t)(a->rng >> 16);
-  }
+  if (r == 10)
+    return random_read(a);
   if (r == 13)
     return a->pokey[13];
   if (r == 14)
@@ -70,17 +88,27 @@ void Pokey_Write(Atari *a, uint16_t address, uint8_t value) {
   if (r == 14) {
     a->pokey_irqen = value;
     a->pokey_irqst |= (uint8_t)~value;
+    static const uint8_t bits[4] = {1, 2, 0, 4};
+    for (int ch = 0; ch < 4; ch++)
+      if ((value & bits[ch]) && !a->pokey_timer_count[ch])
+        a->pokey_timer_count[ch] = timer_period(a, ch);
     a->irq = (uint8_t)(a->pokey_irqst | ~a->pokey_irqen) != 0xff;
     return;
   }
   if (r == 15) {
     a->pokey_skctl = value;
+    if (!(value & 3)) {
+      a->rng = a->pokey_random_poly9 = 1;
+      a->pokey_random_cycle = a->cycles;
+    }
     audio_event(a, 15, value);
     return;
   }
   if (r == 9) {
     audio_event(a, 9, value);
     a->pokey_timer_base = a->cycles;
+    for (int ch = 0; ch < 4; ch++)
+      a->pokey_timer_count[ch] = timer_period(a, ch);
     return;
   }
   a->pokey[r] = value;
@@ -94,11 +122,17 @@ void Pokey_Advance(Atari *a, int cycles) {
   static const uint8_t bits[4] = {1, 2, 0, 4};
   for (int ch = 0; ch < 4; ch++)
     if (bits[ch] && (a->pokey_irqen & bits[ch])) {
-      uint64_t now = a->cycles - a->pokey_timer_base,
-               old = now - (unsigned)cycles;
+      uint64_t left = a->pokey_timer_count[ch];
       unsigned div = timer_period(a, ch);
-      if (div && now / div != old / div)
+      if (!left)
+        left = div;
+      if ((uint64_t)(unsigned)cycles >= left) {
         a->pokey_irqst &= (uint8_t)~bits[ch];
+        uint64_t extra = (uint64_t)(unsigned)cycles - left;
+        left = div - (extra % div);
+      } else
+        left -= (unsigned)cycles;
+      a->pokey_timer_count[ch] = left;
     }
   a->irq = (uint8_t)(a->pokey_irqst | ~a->pokey_irqen) != 0xff;
 }

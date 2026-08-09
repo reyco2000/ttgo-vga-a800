@@ -16,7 +16,8 @@ useful as a compact core to read and extend.
 - 64 KiB XL address space, OS/BASIC/self-test overlays, and PORTB banking
 - selectable NTSC (default: 262 lines, 1.790 MHz, 59.92 Hz) or PAL (312
   lines, 1.773 MHz, 49.86 Hz) timing, WSYNC, VCOUNT, GTIA PAL identification,
-  VBI NMI, memory-refresh cycles, and practical ANTIC/PMG DMA stealing
+  VBI NMI, memory-refresh cycles, practical ANTIC/PMG DMA stealing, and
+  cross-scanline accounting for instruction-boundary timing overruns
 - ANTIC display-list traversal, including monochrome, multicolor, and
   double-width character modes, CHACTL, practical HSCROL/VSCROL, and
   approximate bitmap-mode rendering
@@ -27,8 +28,9 @@ useful as a compact core to read and extend.
   two-bit missile shifters, VDELAY, fifth-player and multicolor priority mixing, sticky collision
   latches, HITCLR, and latched joystick triggers
 - PIA joystick and PORTB registers
-- POKEY keyboard and random register; AUDCTL-aware 15/64/1790 kHz and joined
-  timers; cycle-timestamped register writes; pure-tone, reference-tap
+- POKEY keyboard and SKCTL-controlled polynomial RANDOM register; AUDCTL-aware 15/64/1790 kHz and joined
+  per-channel timer countdowns and IRQ edges; cycle-timestamped register
+  writes; pure-tone, reference-tap
   polynomial distortion/noise, latched high-pass, volume-only audio, compact
   nonlinear mixing, and DC and ultrasonic-alias filtering
 - read-only ATR parsing, sector access, and an XL OS SIOV acceleration for
@@ -37,11 +39,11 @@ useful as a compact core to read and extend.
   OS startup
 - SDL2 video, audio, keyboard, joystick-key, and console-key frontend
 
-Important current limits: ANTIC/GTIA are scanline approximations rather than
-cycle-exact; precise scrolling fetch windows,
+Important current limits: ANTIC/GTIA and DMA steals are scanline approximations
+rather than cycle-exact; precise scrolling fetch windows,
 serial SIO command transport at the POKEY bit level, cartridges, save states,
-and unstable undocumented CPU instructions are not implemented. POKEY timer
-IRQ edge cases, analog-accurate DAC mixing, and writes within one output-sample
+and unstable undocumented CPU instructions are not implemented. POKEY serial
+timing, analog-accurate DAC mixing, and writes within one output-sample
 interval remain approximations. The SDL frontend maintains a small
 three-frame queue to avoid host-audio underruns. The SIOV acceleration lets the stock
 XL OS boot compatible ATR images without bit-level serial emulation.
@@ -61,13 +63,14 @@ handles vertical-scroll entry and exit rows, and applies GTIA modes 9, 10, and
 
 The remaining priorities are:
 
-1. Refine CPU/ANTIC timing beyond the current scanline DMA budget;
+1. Refine CPU/ANTIC timing beyond the current scanline DMA budget and
+   instruction-overrun carry;
    page-crossing penalties, stable undocumented opcode families, memory
    refresh, playfield/character/PMG steals, and master-clock advancement during
    CPU pauses are implemented.
-2. Refine POKEY timer IRQ edge cases and analog mixing beyond the current
-   cycle-timestamped writes, reference polynomial phases, joined-channel
-   handling, high-pass latches, and compact nonlinear response.
+2. Refine POKEY serial timing and analog mixing beyond the current per-channel
+   timer IRQs, cycle-timestamped writes, reference polynomial phases,
+   joined-channel handling, high-pass latches, and compact nonlinear response.
 3. Model same-scanline player/missile repositioning and shift-register
    retrigger behavior only when a compatibility test demonstrates a need; the
    current sample set does not justify a raster-event subsystem yet.

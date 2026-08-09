@@ -14,7 +14,7 @@ int Atari_Init(Atari *a, const char *os, const char *basic) {
   a->joystick = 0xff;
   memset(a->trigger, 1, sizeof(a->trigger));
   memset(a->trigger_latch, 1, sizeof(a->trigger_latch));
-  a->rng = 0x19770825;
+  a->rng = a->pokey_random_poly9 = 1;
   Atari_SetVideoStandard(a, A800_NTSC);
   Pia_Reset(a);
   a->pokey_irqst = a->pokey_skstat = 0xff;
@@ -44,6 +44,7 @@ void Atari_Reset(Atari *a) {
   memset(a->pm_latch, 0, sizeof(a->pm_latch));
   memset(a->trigger_latch, 1, sizeof(a->trigger_latch));
   memset(a->pokey, 0, sizeof(a->pokey));
+  memset(a->pokey_timer_count, 0, sizeof(a->pokey_timer_count));
   memset(a->audio_phase, 0, sizeof(a->audio_phase));
   memset(a->audio_output, 0, sizeof(a->audio_output));
   memset(a->audio_regs, 0, sizeof(a->audio_regs));
@@ -53,12 +54,13 @@ void Atari_Reset(Atari *a) {
   a->audio_poly4 = a->audio_poly5 = a->audio_poly9 = a->audio_poly17 = 1;
   a->audio_event_read = a->audio_event_write = a->audio_skctl =
       a->audio_started = 0;
-  a->pokey_timer_base = 0;
+  a->pokey_timer_base = a->pokey_random_cycle = 0;
+  a->rng = a->pokey_random_poly9 = 1;
   a->pokey_irqen = a->pokey_skctl = 0;
   a->pokey_irqst = a->pokey_skstat = 0xff;
   Pia_Reset(a);
   a->cycles = 0;
-  a->irq = a->nmi = 0;
+  a->cpu_cycle_debt = a->irq = a->nmi = 0;
   Cpu_Reset(a);
 }
 uint8_t Atari_Read(Atari *a, uint16_t p) {
@@ -119,12 +121,18 @@ void Atari_Frame(Atari *a) {
       if (a->antic[14] & 0x40)
         a->nmi = 1;
     }
-    int cpu_limit = 114 - Antic_DmaCycles(a);
+    int cpu_limit = 114 - Antic_DmaCycles(a) - a->cpu_cycle_debt;
+    if (cpu_limit < 1)
+      cpu_limit = 1;
+    a->cpu_cycle_debt = 0;
     while (a->line_cycles < cpu_limit) {
       int n = Cpu_Step(a);
       a->line_cycles += n;
       Pokey_Advance(a, n);
     }
+    unsigned cpu_used = (unsigned)(a->cycles - line_start);
+    if (cpu_used > (unsigned)cpu_limit)
+      a->cpu_cycle_debt = (int)(cpu_used - (unsigned)cpu_limit);
     unsigned elapsed = (unsigned)(a->cycles - line_start);
     if (elapsed < 114) {
       unsigned idle = 114 - elapsed;

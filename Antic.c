@@ -320,8 +320,8 @@ void Antic_BeginFrame(Atari *a) {
   a->display_list = (uint16_t)(a->antic[2] | a->antic[3] << 8);
   a->screen_memory = 0;
   a->display_mode = a->display_row = a->display_rows = a->display_scroll =
-      a->display_dli = a->display_vscroll_active = a->display_stopped =
-          a->display_dma_bytes = 0;
+      a->display_dli = a->display_vscroll_active = a->display_first_line =
+          a->display_stopped = a->display_dma_bytes = 0;
   a->display_width = 0;
   memset(a->collision_map, 0,
          sizeof(*a->collision_map) * (size_t)A800_WIDTH * a->frame_lines);
@@ -355,6 +355,7 @@ void Antic_BeginLine(Atari *a, int y) {
       a->display_scroll = ins & 0x30;
       a->display_dli = (uint8_t)(ins & 0x80);
       a->display_width = (uint8_t)(a->antic[0] & 3);
+      a->display_first_line = 1;
       if (mode >= 2 && (ins & 64)) {
         a->screen_memory =
             (uint16_t)(Atari_Read(a, a->display_list) |
@@ -395,7 +396,7 @@ int Antic_DmaCycles(const Atari *a) {
                     : a->display_width,
         bytes = line_bytes(a->display_mode, width);
     cycles += bytes;
-    if (a->display_mode >= 2 && a->display_mode <= 7 && a->display_row == 0)
+    if (a->display_mode >= 2 && a->display_mode <= 7 && a->display_first_line)
       cycles += bytes;
   }
   return cycles < 104 ? cycles : 104;
@@ -410,6 +411,7 @@ void Antic_RenderLine(Atari *a, int y) {
                   a->display_width);
       a->display_row++;
       a->display_rows--;
+      a->display_first_line = 0;
       if (!a->display_rows && a->display_mode) {
         int width = (a->display_scroll & 0x10) && a->display_width < 3
                         ? a->display_width + 1

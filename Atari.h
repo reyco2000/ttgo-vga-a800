@@ -30,12 +30,13 @@ struct Atari {
   uint16_t collision_map[A800_WIDTH * A800_MAX_HEIGHT];
   uint16_t display_list, screen_memory;
   uint8_t display_mode, display_row, display_rows, display_width,
-      display_scroll, display_dli, display_vscroll_active, display_stopped;
+      display_scroll, display_dli, display_vscroll_active, display_first_line,
+      display_stopped;
   uint8_t display_dma_bytes;
   uint16_t pc;
   uint8_t a, x, y, s, p;
   uint64_t cycles;
-  int scanline, line_cycles;
+  int scanline, line_cycles, cpu_cycle_debt;
   AtariVideoStandard video_standard;
   int frame_lines;
   unsigned cpu_hz;
@@ -43,7 +44,8 @@ struct Atari {
   int irq, nmi, stopped;
   uint8_t keycode, console, joystick, trigger[4], trigger_latch[4];
   unsigned option_override;
-  uint32_t rng;
+  uint32_t rng, pokey_random_poly9;
+  uint64_t pokey_random_cycle;
   double audio_phase[4];
   double audio_poly_phase, audio_previous, audio_filter;
   uint32_t audio_poly4, audio_poly5, audio_poly9, audio_poly17;
@@ -52,7 +54,7 @@ struct Atari {
   AtariAudioEvent audio_events[A800_AUDIO_EVENTS];
   unsigned audio_event_read, audio_event_write;
   double audio_render_cycle;
-  uint64_t pokey_timer_base;
+  uint64_t pokey_timer_base, pokey_timer_count[4];
   uint8_t *disk;
   size_t disk_size;
   int disk_readonly;

@@ -119,6 +119,14 @@ int main(void) {
   Pokey_Write(&a, 0xd20f, 3);
   assert(a.pokey_skctl == 3);
   assert(Pokey_Read(&a, 0xd20f) == 0xff);
+  Pokey_Write(&a, 0xd20f, 0);
+  a.cycles += 100;
+  (void)Pokey_Read(&a, 0xd20a);
+  assert(a.rng == 1 && a.pokey_random_poly9 == 1);
+  Pokey_Write(&a, 0xd20f, 3);
+  a.cycles++;
+  (void)Pokey_Read(&a, 0xd20a);
+  assert(a.rng != 1 && a.pokey_random_poly9 != 1);
   a.cpu_hz = 1789772;
   Pokey_Write(&a, 0xd200, 10);
   Pokey_Write(&a, 0xd201, 0xaf);
@@ -150,19 +158,24 @@ int main(void) {
   Pokey_Audio(&timed, audio, 1, 1);
   assert(timed.audio_regs[0] == 9);
   a.pokey_irqst = 0xff;
-  a.pokey_irqen = 1;
-  a.pokey[0] = 0;
-  a.pokey[8] = 0x40;
-  a.cycles = 4;
-  a.pokey_timer_base = 0;
+  Pokey_Write(&a, 0xd200, 0);
+  Pokey_Write(&a, 0xd208, 0x40);
+  Pokey_Write(&a, 0xd20e, 1);
+  Pokey_Write(&a, 0xd209, 0);
   Pokey_Advance(&a, 4);
   assert(!(a.pokey_irqst & 1));
   a.pokey_irqst = 0xff;
-  a.pokey_irqen = 2;
-  a.pokey[0] = a.pokey[2] = 0;
-  a.pokey[8] = 0x50;
-  a.cycles = 7;
-  a.pokey_timer_base = 0;
+  Pokey_Write(&a, 0xd209, 0);
+  Pokey_Advance(&a, 3);
+  Pokey_Write(&a, 0xd200, 20);
+  Pokey_Advance(&a, 1);
+  assert(!(a.pokey_irqst & 1));
+  a.pokey_irqst = 0xff;
+  Pokey_Write(&a, 0xd200, 0);
+  Pokey_Write(&a, 0xd202, 0);
+  Pokey_Write(&a, 0xd208, 0x50);
+  Pokey_Write(&a, 0xd20e, 2);
+  Pokey_Write(&a, 0xd209, 0);
   Pokey_Advance(&a, 7);
   assert(!(a.pokey_irqst & 2));
   a.pc = 0xe474;
@@ -236,6 +249,7 @@ int main(void) {
   Antic_BeginFrame(&a);
   Antic_BeginLine(&a, 8);
   assert(a.display_row == 3 && a.display_rows == 5);
+  assert(Antic_DmaCycles(&a) == 92);
   for (int line = 8; line < 13; line++) {
     if (line != 8)
       Antic_BeginLine(&a, line);
@@ -406,5 +420,16 @@ int main(void) {
   a.line_pmg[40][0] = 0x80;
   Antic_Frame(&a);
   assert(a.pixels[40 * A800_WIDTH + 192] == Gtia_Color(0x2a));
+  memset(&timed, 0, sizeof(timed));
+  Atari_SetVideoStandard(&timed, A800_NTSC);
+  timed.pia_ddr[1] = 0xff;
+  timed.pia[1] = 0;
+  timed.pc = 0x200;
+  timed.ram[0x200] = 0x4c;
+  timed.ram[0x201] = 0;
+  timed.ram[0x202] = 2;
+  Atari_Frame(&timed);
+  assert(timed.cycles == 262u * 114u);
+  assert(timed.cpu_cycle_debt <= 2);
   return 0;
 }
