@@ -430,6 +430,9 @@ int main(void) {
   a.line_pmg[40][0] = 0x80;
   Antic_Frame(&a);
   assert(a.pixels[40 * A800_WIDTH + 192] == Gtia_Color(0x2a));
+  a.line_gtia[40][29] = 0;
+  Antic_Frame(&a);
+  assert(a.pixels[40 * A800_WIDTH + 192] == Gtia_Color(0x2a));
   memset(&timed, 0, sizeof(timed));
   Atari_SetVideoStandard(&timed, A800_NTSC);
   timed.pia_ddr[1] = 0xff;

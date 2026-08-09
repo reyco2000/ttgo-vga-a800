@@ -296,24 +296,21 @@ static void draw_pmg(Atari *a, int y) {
   if (y < 8 || y >= 248)
     return;
   uint8_t *g = a->line_gtia[y], *pm = a->line_pmg[y];
-  if (g[29] & 2)
-    for (int p = 0; p < 4; p++) {
-      uint8_t bits = pm[p];
-      int s = pm_scale(g[8 + p]), x = (g[p] - 0x22) * 2 + 4;
-      for (int b = 0; b < 8; b++)
-        if (bits & (128 >> b))
-          player_pixel(a, y, x + b * 2 * s, 2 * s, p);
-    }
-  if (g[29] & 1) {
-    uint8_t bits = pm[4];
-    for (int m = 0; m < 4; m++) {
-      unsigned pair = (bits >> (m * 2)) & 3;
-      int s = pm_scale(g[12] >> (m * 2)), x = (g[4 + m] - 0x22) * 2 + 4;
-      if (pair & 2)
-        missile_pixel(a, y, x, 2 * s, m);
-      if (pair & 1)
-        missile_pixel(a, y, x + 2 * s, 2 * s, m);
-    }
+  for (int p = 0; p < 4; p++) {
+    uint8_t bits = pm[p];
+    int s = pm_scale(g[8 + p]), x = (g[p] - 0x22) * 2 + 4;
+    for (int b = 0; b < 8; b++)
+      if (bits & (128 >> b))
+        player_pixel(a, y, x + b * 2 * s, 2 * s, p);
+  }
+  uint8_t bits = pm[4];
+  for (int m = 0; m < 4; m++) {
+    unsigned pair = (bits >> (m * 2)) & 3;
+    int s = pm_scale(g[12] >> (m * 2)), x = (g[4 + m] - 0x22) * 2 + 4;
+    if (pair & 2)
+      missile_pixel(a, y, x, 2 * s, m);
+    if (pair & 1)
+      missile_pixel(a, y, x + 2 * s, 2 * s, m);
   }
 }
 void Antic_BeginFrame(Atari *a) {
