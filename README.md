@@ -136,20 +136,27 @@ remaining behavior without requiring additional source files.
 
 The build also produces `a800-validate`, a headless replacement for the small
 one-off boot and framebuffer probes used during development. It reports CPU,
-banking, ANTIC, GTIA, POKEY audio/control registers, and framebuffer state and can save the final frame
-as a portable pixmap:
+banking, ANTIC, GTIA, POKEY audio/control registers, and framebuffer state. It
+can run for an emulated duration and save the final frame as a dependency-free
+binary portable pixmap (PPM):
 
 ```sh
 ./build/a800-validate --basic --frames 180
 ./build/a800-validate --frames 300 program.xex
+./build/a800-validate --seconds 5 --output frame.ppm program.xex
+./build/a800-validate --seconds 8 --start-frame 200 game.xex
 ./build/a800-validate --frames 300 --output frame.ppm disk.atr
 ./build/a800-validate --pal --frames 180
 ```
 
 Use `--os` and `--basic-rom` to select ROM files. The utility returns failure
-for invalid arguments, ROM/media errors, or a final frame with playfield DMA
-disabled. `--xex-frame N` overrides the default frame-76 XEX handoff for boot
-sequencing investigations.
+for invalid arguments or ROM/media/output errors. A completed capture returns
+1 when every framebuffer pixel has the same color and 0 when the frame contains
+more than one color, making the command directly usable in automated program
+smoke tests. When the frame is blank (a single color), a file requested with
+`--output` is not written. `--xex-frame N` overrides the default frame-76 XEX handoff;
+`--start-frame N` presses START for one frame; and `--trace-audio` reports POKEY
+register changes.
 
 ## Provenance
 

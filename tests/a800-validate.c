@@ -34,9 +34,9 @@ static int write_ppm(const Atari *a, const char *path) {
 }
 static void usage(const char *name) {
   fprintf(stderr,
-          "usage: %s [--pal|--ntsc] [--basic] [--frames N] [--xex-frame N] "
-          "[--start-frame N] [--trace-audio] [--output frame.ppm] [--os ROM] "
-          "[--basic-rom ROM] [media.atr|program.xex]\n",
+          "usage: %s [--pal|--ntsc] [--basic] [--frames N|--seconds N] "
+          "[--xex-frame N] [--start-frame N] [--trace-audio] [--output "
+          "frame.ppm] [--os ROM] [--basic-rom ROM] [media.atr|program.xex]\n",
           name);
 }
 
@@ -45,6 +45,7 @@ int main(int argc, char **argv) {
              *output = NULL;
   int frames = 180, xex_frame = 76, start_frame = -1, basic = 0,
       trace_audio = 0;
+  double seconds = 0;
   AtariVideoStandard standard = A800_NTSC;
   for (int i = 1; i < argc; i++) {
     if (!strcmp(argv[i], "--pal"))
@@ -53,8 +54,11 @@ int main(int argc, char **argv) {
       standard = A800_NTSC;
     else if (!strcmp(argv[i], "--basic"))
       basic = 1;
-    else if (!strcmp(argv[i], "--frames") && i + 1 < argc)
+    else if (!strcmp(argv[i], "--frames") && i + 1 < argc) {
       frames = atoi(argv[++i]);
+      seconds = 0;
+    } else if (!strcmp(argv[i], "--seconds") && i + 1 < argc)
+      seconds = atof(argv[++i]);
     else if (!strcmp(argv[i], "--xex-frame") && i + 1 < argc)
       xex_frame = atoi(argv[++i]);
     else if (!strcmp(argv[i], "--start-frame") && i + 1 < argc)
@@ -73,7 +77,7 @@ int main(int argc, char **argv) {
     } else
       media = argv[i];
   }
-  if (frames < 1) {
+  if (frames < 1 || seconds < 0) {
     usage(argv[0]);
     return 2;
   }
@@ -83,6 +87,8 @@ int main(int argc, char **argv) {
     return 2;
   }
   Atari_SetVideoStandard(&a, standard);
+  if (seconds > 0)
+    frames = (int)(seconds * a.frame_rate + .5);
   int xex = media && extension_is(media, ".xex");
   if (!basic && !xex)
     a.console &= (uint8_t)~4;
@@ -156,11 +162,13 @@ int main(int argc, char **argv) {
          a.pokey_skctl, a.pokey_skstat);
   printf("framebuffer=%dx%d pixels_different_from_corner=%u media=%s\n",
          A800_WIDTH, a.frame_lines, different, media ? media : "none");
-  if (output && write_ppm(&a, output)) {
+  if (output && !different)
+    printf("capture=%s skipped=blank-frame\n", output);
+  if (output && different && write_ppm(&a, output)) {
     fprintf(stderr, "a800-validate: cannot write %s\n", output);
     Atari_Destroy(&a);
     return 2;
   }
   Atari_Destroy(&a);
-  return a.antic[0] & 3 ? 0 : 1;
+  return different ? 0 : 1;
 }
