@@ -17,7 +17,8 @@ struct Atari {
   uint8_t gtia_collisions[16];
   uint8_t pia_ddr[2];
   uint8_t pokey_irqen, pokey_irqst, pokey_skctl, pokey_skstat;
-  uint32_t pixels[A800_WIDTH * A800_MAX_HEIGHT];
+  uint8_t pixels[A800_WIDTH * A800_MAX_HEIGHT];
+  const uint32_t *palette;
   uint8_t line_colors[A800_MAX_HEIGHT][5];
   uint8_t line_gtia[A800_MAX_HEIGHT][32];
   uint8_t line_antic[A800_MAX_HEIGHT][16];

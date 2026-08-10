@@ -176,9 +176,9 @@ WC_EXPORT_RENDER void wc_render(void) {
     xex_data = NULL;
   }
   for (int y = 0; y < DEFAULT_HEIGHT; y++)
-    memcpy(wc_framebuffer + y * DEFAULT_WIDTH,
-           machine.pixels + (y + 11) * A800_WIDTH + 24,
-           DEFAULT_WIDTH * sizeof(*wc_framebuffer));
+    for (int x = 0; x < DEFAULT_WIDTH; x++)
+      wc_framebuffer[y * DEFAULT_WIDTH + x] =
+          machine.palette[machine.pixels[(y + 11) * A800_WIDTH + x + 24]];
   int16_t samples[512];
   while (machine.audio_len) {
     int n = machine.audio_len > 512 ? 512 : machine.audio_len;

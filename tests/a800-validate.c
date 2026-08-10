@@ -25,7 +25,7 @@ static int write_ppm(const Atari *a, const char *path) {
     return -1;
   fprintf(f, "P6\n%d %d\n255\n", A800_WIDTH, a->frame_lines);
   for (int i = 0; i < A800_WIDTH * a->frame_lines; i++) {
-    uint32_t p = a->pixels[i];
+    uint32_t p = a->palette[a->pixels[i]];
     fputc((int)(p >> 16) & 255, f);
     fputc((int)(p >> 8) & 255, f);
     fputc((int)p & 255, f);
@@ -124,7 +124,7 @@ int main(int argc, char **argv) {
       memcpy(last_audio, a.pokey, 9);
     }
   }
-  uint32_t first = a.pixels[0];
+  uint8_t first = a.pixels[0];
   unsigned different = 0;
   for (int i = 0; i < A800_WIDTH * a.frame_lines; i++)
     if (a.pixels[i] != first)

@@ -212,7 +212,16 @@ int main(int argc, char **argv) {
       xex = NULL;
     }
     if (!xex) {
-      SDL_UpdateTexture(tex, NULL, a.pixels, A800_WIDTH * 4);
+      void *locked;
+      int pitch;
+      if (!SDL_LockTexture(tex, NULL, &locked, &pitch)) {
+        for (int y = 0; y < a.frame_lines; y++) {
+          uint32_t *row = (uint32_t *)((uint8_t *)locked + y * pitch);
+          for (int x = 0; x < A800_WIDTH; x++)
+            row[x] = a.palette[a.pixels[y * A800_WIDTH + x]];
+        }
+        SDL_UnlockTexture(tex);
+      }
       SDL_RenderClear(ren);
       SDL_RenderCopy(ren, tex, NULL, NULL);
       SDL_RenderPresent(ren);

@@ -27,6 +27,7 @@ int Atari_Init(Atari *a, const char *os, const char *basic) {
 }
 void Atari_SetVideoStandard(Atari *a, AtariVideoStandard standard) {
   a->video_standard = standard;
+  a->palette = Gtia_Palette(standard);
   if (standard == A800_PAL) {
     a->frame_lines = 312;
     a->cpu_hz = 1773447u;

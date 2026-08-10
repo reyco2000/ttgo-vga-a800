@@ -55,7 +55,7 @@ static void span(Atari *a, int y, int x, int n, uint8_t c) {
   if (x + n > A800_WIDTH)
     n = A800_WIDTH - x;
   for (int i = 0; i < n; i++)
-    a->pixels[y * A800_WIDTH + x + i] = Gtia_Color(c);
+    a->pixels[y * A800_WIDTH + x + i] = c;
 }
 static void pfspan(Atari *a, int y, int x, int n, uint8_t c, uint8_t mask) {
   span(a, y, x, n, c);
@@ -274,7 +274,7 @@ static void player_pixel(Atari *a, int y, int x, int n, int p) {
         a->gtia_collisions[12 + q] |= (uint8_t)(1 << p);
       }
     *m |= (uint16_t)(0x10 << p);
-    a->pixels[y * A800_WIDTH + x + i] = Gtia_Color(priority_color(a, y, *m));
+    a->pixels[y * A800_WIDTH + x + i] = priority_color(a, y, *m);
   }
 }
 static void missile_pixel(Atari *a, int y, int x, int n, int m) {
@@ -289,7 +289,7 @@ static void missile_pixel(Atari *a, int y, int x, int n, int m) {
     a->gtia_collisions[m] |= (uint8_t)(*v & 15);
     a->gtia_collisions[8 + m] |= (uint8_t)(*v >> 4) & 15;
     *v |= (uint16_t)(0x100 << m);
-    a->pixels[y * A800_WIDTH + x + i] = Gtia_Color(priority_color(a, y, *v));
+    a->pixels[y * A800_WIDTH + x + i] = priority_color(a, y, *v);
   }
 }
 static void draw_pmg(Atari *a, int y) {

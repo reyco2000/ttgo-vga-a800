@@ -23,7 +23,7 @@ useful as a compact core to read and extend.
   approximate bitmap-mode rendering
 - scanline DLI scheduling with per-line ANTIC/GTIA register and PMG DMA capture
 - GTIA color registers, modes 9/10/11 for ANTIC mode F, console/trigger input,
-  and an Atari-inspired palette
+  Atari800-derived default NTSC/PAL palettes, and an indexed 8-bit framebuffer
 - basic player/missile DMA or direct-GRAF rendering with positions, sizes,
   two-bit missile shifters, VDELAY, fifth-player and multicolor priority mixing,
   sticky collision latches, HITCLR, and latched joystick triggers
@@ -188,6 +188,7 @@ mapped to the Atari keyboard matrix and POKEY registers.
 | `6502.c` | CPU execution and interrupts |
 | `Antic.c` | NTSC/PAL frame timing and display-list renderer |
 | `Gtia.c` | colors and console/trigger registers |
+| `Palette.h` | generated default NTSC/PAL RGB tables |
 | `Pokey.c` | keyboard, timers, random source, and audio |
 | `Pia.c` | joystick and XL memory-control ports |
 | `AtariIo.c` | ROM, ATR/SIOV, and segmented XEX loading |
@@ -203,9 +204,10 @@ remaining behavior without requiring additional source files.
 
 ## WASMCART
 
-An optional Emscripten adapter packages a XEX, the XL OS ROM, and the BASIC ROM
-as a WASMCART `.wasc` file. It reuses the normal in-memory XEX loader and keeps
-WASMCART-specific code out of the native core build:
+An optional Emscripten adapter packages a XEX and the XL OS ROM as a WASMCART
+`.wasc` file, with the BASIC ROM included only when `-b` is given. It reuses the
+normal in-memory XEX loader and keeps WASMCART-specific code out of the native
+core build:
 
 ```sh
 python3 xex2wasc.py game.xex game.wasc "Game name"
@@ -244,7 +246,6 @@ intended to cover nonblank-but-incorrect output.
 
 ## Provenance
 
-The code in this directory was written for this simplified implementation; it
-does not copy A8E source. Atari800 (GPL-2.0-or-later) was used as an
-architectural and behavioral reference, especially its CPU, memory, ANTIC,
-GTIA, POKEY, and PIA module boundaries. See <https://atari800.github.io/>.
+The simplified emulator core was written independently. It does not copy A8E
+source code. Atari800 was used as an architectural and behavioral reference,
+especially for CPU, memory, ANTIC, GTIA, POKEY, and PIA behavior.
