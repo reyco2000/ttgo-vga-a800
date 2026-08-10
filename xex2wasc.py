@@ -46,7 +46,7 @@ def main():
         "emcc",
         "-O3",
         "-DWASMCART",
-        "-DWASMCART_PAL" if args.pal else "-DWASMCART_NTSC",
+        "-DNO_NTSC" if args.pal else "-DNO_PAL",
         "-I.",
         "-s", "WASM=1", "-s", "SIDE_MODULE=0", "-s", "ALLOW_MEMORY_GROWTH=1",
         "-s", "INITIAL_MEMORY=33554432",
@@ -55,8 +55,8 @@ def main():
         "-o", wasm, "6502.c", "Atari.c", "Antic.c", "AtariIo.c", "Gtia.c",
         "Pia.c", "Pokey.c", "wasmcart_main.c", "-lm",
     ]
-    if args.basic:
-        command.insert(4, "-DWASMCART_BASIC")
+    if not args.basic:
+        command.insert(4, "-DNO_BASIC")
     temporary = tempfile.mkdtemp(prefix="a800-wasc-")
     try:
         print("Compiling a800 wasm cartridge...")

@@ -2,10 +2,10 @@
 #include "Palette.h"
 
 const uint32_t *Gtia_Palette(AtariVideoStandard standard) {
-#if defined(WASMCART_PAL)
+#ifdef NO_NTSC
   (void)standard;
   return pal_palette;
-#elif defined(WASMCART_NTSC)
+#elif defined(NO_PAL)
   (void)standard;
   return ntsc_palette;
 #else

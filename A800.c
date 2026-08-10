@@ -128,22 +128,37 @@ static void input(Atari *a, const SDL_Event *e, int down, int use_basic,
   }
 }
 int main(int argc, char **argv) {
-  const char *os = "ATARIXL.ROM", *basic = "ATARIBAS.ROM", *media = NULL,
-             *xex = NULL;
+  const char *os = "ATARIXL.ROM", *media = NULL, *xex = NULL;
+#ifndef NO_BASIC
+  const char *basic = "ATARIBAS.ROM";
+#endif
   int use_basic = 0;
+#ifdef NO_NTSC
+  AtariVideoStandard standard = A800_PAL;
+#else
   AtariVideoStandard standard = A800_NTSC;
+#endif
   for (int i = 1; i < argc; i++) {
-    if (!strcmp(argv[i], "-b"))
+#ifndef NO_BASIC
+    if (!strcmp(argv[i], "-b") || !strcmp(argv[i], "--basic"))
       use_basic = 1;
-    else if (!strcmp(argv[i], "--pal"))
+    else if (!strcmp(argv[i], "--basic-rom") && i + 1 < argc)
+      basic = argv[++i];
+    else
+#endif
+#if !defined(NO_NTSC) && !defined(NO_PAL)
+        if (!strcmp(argv[i], "--pal"))
       standard = A800_PAL;
     else if (!strcmp(argv[i], "--ntsc"))
       standard = A800_NTSC;
-    else if (!strcmp(argv[i], "--os") && i + 1 < argc)
-      os = argv[++i];
-    else if (!strcmp(argv[i], "--basic") && i + 1 < argc)
-      basic = argv[++i];
     else
+#endif
+        if (!strcmp(argv[i], "--os") && i + 1 < argc)
+      os = argv[++i];
+    else if (argv[i][0] == '-') {
+      fprintf(stderr, "a800: unsupported option: %s\n", argv[i]);
+      return 1;
+    } else
       media = argv[i];
   }
   if (media) {
@@ -152,10 +167,18 @@ int main(int argc, char **argv) {
       xex = media;
   }
   Atari a;
+#ifdef NO_BASIC
+  int r = Atari_Init(&a, os, NULL);
+#else
   int r = Atari_Init(&a, os, use_basic ? basic : NULL);
+#endif
   if (r) {
+#ifdef NO_BASIC
+    fprintf(stderr, "a800: cannot load %s (expected 16384 bytes)\n", os);
+#else
     fprintf(stderr, "a800: cannot load %s (%s)\n", r == -1 ? os : basic,
             r == -1 ? "expected 16384 bytes" : "expected 8192 bytes");
+#endif
     return 1;
   }
   Atari_SetVideoStandard(&a, standard);

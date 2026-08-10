@@ -12,7 +12,9 @@ typedef enum { A800_NTSC = 0, A800_PAL = 1 } AtariVideoStandard;
 struct Atari {
   uint8_t ram[65536];
   uint8_t os[16384];
+#ifndef NO_BASIC
   uint8_t basic[8192];
+#endif
   uint8_t antic[16], gtia[32], pokey[16], pia[4];
   uint8_t gtia_collisions[16];
   uint8_t pia_ddr[2];

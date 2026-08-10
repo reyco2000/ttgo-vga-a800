@@ -137,16 +137,16 @@ WC_EXPORT wc_info_t *wc_get_info(void) {
 }
 
 WC_EXPORT_INIT void wc_init(void) {
-#ifdef WASMCART_BASIC
-  const char *basic = "ATARIBAS.ROM";
-#else
+#ifdef NO_BASIC
   const char *basic = NULL;
+#else
+  const char *basic = "ATARIBAS.ROM";
 #endif
   basic_available = basic != NULL;
   option_boot_frames = !basic_available;
   if (Atari_Init(&machine, "ATARIXL.ROM", basic))
     return;
-#ifdef WASMCART_PAL
+#ifdef NO_NTSC
   Atari_SetVideoStandard(&machine, A800_PAL);
 #else
   Atari_SetVideoStandard(&machine, A800_NTSC);

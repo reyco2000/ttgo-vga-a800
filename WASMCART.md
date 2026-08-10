@@ -18,7 +18,9 @@ neither read nor packaged. The script requires `emcc`, `npx`, and the
 exports a 336x240 cropped framebuffer, float32 stereo audio, one joystick,
 console buttons, and USB-HID keyboard input. NTSC is the default; `--pal`
 bakes PAL timing and its palette into the cartridge, while `--ntsc` selects
-NTSC explicitly. The unused palette is omitted from each optimized WASM build.
+NTSC explicitly. The packager defines `NO_PAL` or `NO_NTSC`, respectively, so
+the unused standard and palette are omitted. It defines `NO_BASIC` unless `-b`
+is passed.
 
 The shared `wasmcart.h` and `wc_cart.h` files define wasmcart ABI version 3 and
 the standard cartridge buffers. `wasmcart_main.c` contains the a800-specific

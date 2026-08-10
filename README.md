@@ -147,6 +147,13 @@ Stable undocumented NMOS 6502 opcodes are enabled by default. They can be
 excluded for a strictly documented instruction set with
 `-DA800_UNDOCUMENTED_OPCODES=OFF`.
 
+BASIC, NTSC, and PAL support are also enabled by default. Minimal builds can
+use `-DA800_BASIC=OFF`, `-DA800_NTSC=OFF`, or `-DA800_PAL=OFF`; these define
+`NO_BASIC`, `NO_NTSC`, or `NO_PAL` for the core. At least one video standard
+must remain enabled. A no-BASIC build removes `-b`, `--basic`, and
+`--basic-rom`; a single-standard build removes both runtime video-selection
+options because there is no alternative standard to select.
+
 ## Run
 
 Provide an exact-size Atari XL OS ROM dump (not included):
@@ -161,10 +168,11 @@ Provide an exact-size Atari XL OS ROM dump (not included):
 ./build/a800 -b
 ./build/a800 game.atr
 ./build/a800 program.xex
-./build/a800 --os path/to/ATARIXL.ROM --basic path/to/ATARIBAS.ROM
+./build/a800 -b --os path/to/ATARIXL.ROM --basic-rom path/to/ATARIBAS.ROM
 ```
 
-Without `-b`, BASIC is disabled for normal boot. XEX startup performs the XL
+When BASIC support is compiled in, it remains disabled without `-b`. XEX
+startup performs the XL
 OS initialization needed by programs, and the BASIC ROM is not read even when
 it exists. The no-BASIC boot pulses OPTION while the OS samples the console
 keys, and the XEX loader supplies the normal XL OS character-base default

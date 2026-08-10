@@ -15,17 +15,30 @@ int Atari_Init(Atari *a, const char *os, const char *basic) {
   memset(a->trigger, 1, sizeof(a->trigger));
   memset(a->trigger_latch, 1, sizeof(a->trigger_latch));
   a->rng = a->pokey_random_poly9 = 1;
+#ifdef NO_NTSC
+  Atari_SetVideoStandard(a, A800_PAL);
+#else
   Atari_SetVideoStandard(a, A800_NTSC);
+#endif
   Pia_Reset(a);
   a->pokey_irqst = a->pokey_skstat = 0xff;
   if (AtariIo_LoadFile(os, a->os, sizeof(a->os)))
     return -1;
+#ifndef NO_BASIC
   if (basic && AtariIo_LoadFile(basic, a->basic, sizeof(a->basic)))
     return -2;
+#else
+  (void)basic;
+#endif
   Atari_Reset(a);
   return 0;
 }
 void Atari_SetVideoStandard(Atari *a, AtariVideoStandard standard) {
+#ifdef NO_NTSC
+  standard = A800_PAL;
+#elif defined(NO_PAL)
+  standard = A800_NTSC;
+#endif
   a->video_standard = standard;
   a->palette = Gtia_Palette(standard);
   if (standard == A800_PAL) {
@@ -79,8 +92,10 @@ uint8_t Atari_Read(Atari *a, uint16_t p) {
   }
   if (p >= 0xc000 && (portb & 1))
     return a->os[p - 0xc000];
+#ifndef NO_BASIC
   if (p >= 0xa000 && p < 0xc000 && !(portb & 2))
     return a->basic[p - 0xa000];
+#endif
   if (p >= 0x5000 && p < 0x5800 && (portb & 1) && !(portb & 0x80))
     return a->os[0x1000 + p - 0x5000];
   return a->ram[p];
@@ -104,8 +119,12 @@ void Atari_Write(Atari *a, uint16_t p, uint8_t v) {
     return;
   }
   uint8_t pb = Atari_PortB(a);
-  if ((p >= 0xc000 && (pb & 1)) || (p >= 0xa000 && p < 0xc000 && !(pb & 2)))
+  if (p >= 0xc000 && (pb & 1))
     return;
+#ifndef NO_BASIC
+  if (p >= 0xa000 && p < 0xc000 && !(pb & 2))
+    return;
+#endif
   a->ram[p] = v;
 }
 void Atari_Frame(Atari *a) {

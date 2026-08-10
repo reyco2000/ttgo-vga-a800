@@ -34,27 +34,52 @@ static int write_ppm(const Atari *a, const char *path) {
 }
 static void usage(const char *name) {
   fprintf(stderr,
-          "usage: %s [--pal|--ntsc] [--basic] [--frames N|--seconds N] "
+          "usage: %s "
+#if !defined(NO_NTSC) && !defined(NO_PAL)
+          "[--pal|--ntsc] "
+#endif
+#ifndef NO_BASIC
+          "[--basic] "
+#endif
+          "[--frames N|--seconds N] "
           "[--xex-frame N] [--start-frame N] [--trace-audio] [--output "
-          "frame.ppm] [--os ROM] [--basic-rom ROM] [media.atr|program.xex]\n",
+          "frame.ppm] [--os ROM] "
+#ifndef NO_BASIC
+          "[--basic-rom ROM] "
+#endif
+          "[media.atr|program.xex]\n",
           name);
 }
 
 int main(int argc, char **argv) {
-  const char *os = "ATARIXL.ROM", *basic_rom = "ATARIBAS.ROM", *media = NULL,
-             *output = NULL;
+  const char *os = "ATARIXL.ROM", *media = NULL, *output = NULL;
+#ifndef NO_BASIC
+  const char *basic_rom = "ATARIBAS.ROM";
+#endif
   int frames = 180, xex_frame = A800_XEX_BOOT_FRAMES, start_frame = -1,
       basic = 0, trace_audio = 0;
   double seconds = 0;
+#ifdef NO_NTSC
+  AtariVideoStandard standard = A800_PAL;
+#else
   AtariVideoStandard standard = A800_NTSC;
+#endif
   for (int i = 1; i < argc; i++) {
+#if !defined(NO_NTSC) && !defined(NO_PAL)
     if (!strcmp(argv[i], "--pal"))
       standard = A800_PAL;
     else if (!strcmp(argv[i], "--ntsc"))
       standard = A800_NTSC;
-    else if (!strcmp(argv[i], "--basic"))
+    else
+#endif
+#ifndef NO_BASIC
+        if (!strcmp(argv[i], "--basic"))
       basic = 1;
-    else if (!strcmp(argv[i], "--frames") && i + 1 < argc) {
+    else if (!strcmp(argv[i], "--basic-rom") && i + 1 < argc)
+      basic_rom = argv[++i];
+    else
+#endif
+        if (!strcmp(argv[i], "--frames") && i + 1 < argc) {
       frames = atoi(argv[++i]);
       seconds = 0;
     } else if (!strcmp(argv[i], "--seconds") && i + 1 < argc)
@@ -69,8 +94,6 @@ int main(int argc, char **argv) {
       output = argv[++i];
     else if (!strcmp(argv[i], "--os") && i + 1 < argc)
       os = argv[++i];
-    else if (!strcmp(argv[i], "--basic-rom") && i + 1 < argc)
-      basic_rom = argv[++i];
     else if (argv[i][0] == '-') {
       usage(argv[0]);
       return 2;
@@ -82,7 +105,11 @@ int main(int argc, char **argv) {
     return 2;
   }
   Atari a;
+#ifdef NO_BASIC
+  if (Atari_Init(&a, os, NULL)) {
+#else
   if (Atari_Init(&a, os, basic ? basic_rom : NULL)) {
+#endif
     fprintf(stderr, "a800-validate: ROM load failed\n");
     return 2;
   }
@@ -134,9 +161,14 @@ int main(int argc, char **argv) {
          (unsigned long long)a.cycles);
   printf("cpu pc=%04x a=%02x x=%02x y=%02x s=%02x p=%02x irq=%d nmi=%d\n", a.pc,
          a.a, a.x, a.y, a.s, a.p, a.irq, a.nmi);
+#ifdef NO_BASIC
+  printf("memory portb=%02x os=%s basic=unavailable\n", Atari_PortB(&a),
+         (Atari_PortB(&a) & 1) ? "on" : "off");
+#else
   printf("memory portb=%02x os=%s basic=%s\n", Atari_PortB(&a),
          (Atari_PortB(&a) & 1) ? "on" : "off",
          (Atari_PortB(&a) & 2) ? "off" : "on");
+#endif
   printf("antic dmactl=%02x dlist=%02x%02x chbase=%02x pmbase=%02x nmien=%02x "
          "nmist=%02x\n",
          a.antic[0], a.antic[3], a.antic[2], a.antic[9], a.antic[7],

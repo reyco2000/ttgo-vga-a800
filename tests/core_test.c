@@ -85,17 +85,21 @@ int main(void) {
   a.os[0x3ffd] = 0x12;
   Cpu_Reset(&a);
   assert(a.pc == 0x1234);
+#ifndef NO_NTSC
   Atari_SetVideoStandard(&a, A800_NTSC);
   assert(a.frame_lines == 262);
   assert(a.cpu_hz == 1789772u);
   assert(a.palette[0] == 0xff040404u);
   assert(a.palette[0x34] == 0xff5e2800u);
   assert(Gtia_Read(&a, 0xd014) == 0x0f);
+#endif
+#ifndef NO_PAL
   Atari_SetVideoStandard(&a, A800_PAL);
   assert(a.frame_lines == 312);
   assert(a.cpu_hz == 1773447u);
   assert(a.palette[0x34] == 0xff681b23u);
   assert(Gtia_Read(&a, 0xd014) == 0x01);
+#endif
   memset(a.trigger, 1, sizeof(a.trigger));
   memset(a.trigger_latch, 1, sizeof(a.trigger_latch));
   Gtia_Write(&a, 0xd01d, 4);
@@ -476,7 +480,7 @@ int main(void) {
   timed.ram[0x201] = 0;
   timed.ram[0x202] = 2;
   Atari_Frame(&timed);
-  assert(timed.cycles == 262u * 114u);
+  assert(timed.cycles == (uint64_t)timed.frame_lines * 114u);
   assert(timed.cpu_cycle_debt <= 2);
   return 0;
 }

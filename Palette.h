@@ -5,6 +5,7 @@
 /* Generated from Atari800's standard preset: NTSC color delay 26.8 degrees,
  * PAL color delay 23.2 degrees with even/odd chroma averaged, gamma 2.35, and
  * video levels 16..235. */
+#ifndef NO_NTSC
 static const uint32_t ntsc_palette[256] = {
     0xff040404u, 0xff0f0f0fu, 0xff1b1b1bu, 0xff272727u, 0xff333333u,
     0xff414141u, 0xff4f4f4fu, 0xff5e5e5eu, 0xff686868u, 0xff787878u,
@@ -58,7 +59,9 @@ static const uint32_t ntsc_palette[256] = {
     0xff4f4c00u, 0xff5d5a00u, 0xff6c6802u, 0xff76730bu, 0xff86821bu,
     0xff97942du, 0xffa8a53eu, 0xffb9b650u, 0xffcdc963u, 0xffe1dd78u,
     0xfff8f48fu};
+#endif
 
+#ifndef NO_PAL
 static const uint32_t pal_palette[256] = {
     0xff040404u, 0xff0f0f0fu, 0xff1b1b1bu, 0xff272727u, 0xff333333u,
     0xff414141u, 0xff4f4f4fu, 0xff5e5e5eu, 0xff686868u, 0xff787878u,
@@ -112,5 +115,6 @@ static const uint32_t pal_palette[256] = {
     0xff693a01u, 0xff77480bu, 0xff855619u, 0xff906124u, 0xff9f7134u,
     0xffb08246u, 0xffc29357u, 0xffd3a468u, 0xffe6b87cu, 0xfffacc90u,
     0xffffe3a7u};
+#endif
 
 #endif
