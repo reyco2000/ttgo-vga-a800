@@ -3,3 +3,7 @@
 *.a
 *.dSYM/
 .DS_Store
+*.wasc
+cart.wasm
+ATARIBAS.ROM
+ATARIXL.ROM

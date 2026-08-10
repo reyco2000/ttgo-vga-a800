@@ -4,6 +4,12 @@
 #include <string.h>
 
 int AtariIo_LoadFile(const char *path, uint8_t *dst, size_t expected) {
+#ifdef WASMCART
+  extern int wc_load_asset(const char *, unsigned, void *, unsigned)
+      __attribute__((import_module("env"), import_name("wc_load_asset")));
+  int n = wc_load_asset(path, (unsigned)strlen(path), dst, (unsigned)expected);
+  return n == (int)expected ? 0 : -1;
+#else
   FILE *f = fopen(path, "rb");
   if (!f)
     return -1;
@@ -11,6 +17,7 @@ int AtariIo_LoadFile(const char *path, uint8_t *dst, size_t expected) {
   int extra = fgetc(f);
   fclose(f);
   return n == expected && extra == EOF ? 0 : -1;
+#endif
 }
 int AtariIo_LoadDisk(Atari *a, const char *path) {
   FILE *f = fopen(path, "rb");
@@ -91,29 +98,15 @@ int Atari_LoadDisk(Atari *a, const char *path) {
 int Atari_Sector(Atari *a, unsigned s, uint8_t *d, int w) {
   return AtariIo_Sector(a, s, d, w);
 }
-int Atari_LoadExecutable(Atari *a, const char *path) {
-  FILE *f = fopen(path, "rb");
-  long size;
-  if (!f)
+int Atari_LoadExecutableData(Atari *a, const uint8_t *data, size_t size) {
+  if (!data || size < 6)
     return -1;
-  if (fseek(f, 0, SEEK_END) || (size = ftell(f)) < 6 || fseek(f, 0, SEEK_SET)) {
-    fclose(f);
-    return -1;
-  }
   free(a->xex_data);
-  a->xex_data = (uint8_t *)malloc((size_t)size);
-  if (!a->xex_data) {
-    fclose(f);
+  a->xex_data = (uint8_t *)malloc(size);
+  if (!a->xex_data)
     return -1;
-  }
-  if (fread(a->xex_data, 1, (size_t)size, f) != (size_t)size) {
-    free(a->xex_data);
-    a->xex_data = NULL;
-    fclose(f);
-    return -1;
-  }
-  fclose(f);
-  a->xex_size = (size_t)size;
+  memcpy(a->xex_data, data, size);
+  a->xex_size = size;
   a->xex_pos = 0;
   a->xex_first = 0xffff;
   a->ram[9] = 1;
@@ -129,6 +122,27 @@ int Atari_LoadExecutable(Atari *a, const char *path) {
   a->irq = a->nmi = 0;
   AtariIo_XexContinue(a);
   return a->xex_data || a->pc ? 0 : -1;
+}
+int Atari_LoadExecutable(Atari *a, const char *path) {
+  FILE *f = fopen(path, "rb");
+  long size;
+  if (!f)
+    return -1;
+  if (fseek(f, 0, SEEK_END) || (size = ftell(f)) < 6 || fseek(f, 0, SEEK_SET)) {
+    fclose(f);
+    return -1;
+  }
+  uint8_t *data = (uint8_t *)malloc((size_t)size);
+  if (!data) {
+    fclose(f);
+    return -1;
+  }
+  int result = -1;
+  if (fread(data, 1, (size_t)size, f) == (size_t)size)
+    result = Atari_LoadExecutableData(a, data, (size_t)size);
+  free(data);
+  fclose(f);
+  return result;
 }
 void AtariIo_XexContinue(Atari *a) {
   while (a->xex_data) {

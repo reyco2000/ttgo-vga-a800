@@ -179,12 +179,25 @@ mapped to the Atari keyboard matrix and POKEY registers.
 | `AtariIo.c` | ROM, ATR/SIOV, and segmented XEX loading |
 | `Atari.c` | machine wiring and memory map |
 | `A800.c` | SDL2 application |
+| `wasmcart_main.c` | optional WASMCART framebuffer, audio, and input adapter |
 
 The hardware-named files are intentionally retained even when small. Merging
 `Gtia.c` into `Antic.c`, or folding `Pia.c`/`Pokey.c` into `Atari.c`, would mix
 register-device behavior with the scanline scheduler and memory bus. The
 current boundaries match the requested A8E-style layout and leave room for the
 remaining behavior without requiring additional source files.
+
+## WASMCART
+
+An optional Emscripten adapter packages a XEX, the XL OS ROM, and the BASIC ROM
+as a WASMCART `.wasc` file. It reuses the normal in-memory XEX loader and keeps
+WASMCART-specific code out of the native core build:
+
+```sh
+python3 xex2wasc.py game.xex game.wasc "Game name"
+```
+
+See [WASMCART.md](WASMCART.md) for prerequisites, assets, and exported devices.
 
 ## Validation utility
 
