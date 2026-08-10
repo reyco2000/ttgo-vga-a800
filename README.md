@@ -1,8 +1,8 @@
 # a800
 
-`a800` is a small, readable Atari 800 XL (NTSC or PAL) emulator in C. Its flat source
-layout follows A8E (`6502.c`, `Antic.c`, `Gtia.c`, `Pokey.c`, `Pia.c`, and
-`AtariIo.c`), while the implementation is new code informed by Atari800's
+`a800` is a small, readable Atari 800 XL (NTSC or PAL) emulator in C. Its flat
+source layout follows A8E (`6502.c`, `Antic.c`, `Gtia.c`, `Pokey.c`, `Pia.c`,
+and `AtariIo.c`), while the implementation is new code informed by Atari800's
 hardware organization and the Atari register model.
 
 This is an early simplified emulator, not a replacement for Atari800. It is
@@ -25,12 +25,13 @@ useful as a compact core to read and extend.
 - GTIA color registers, modes 9/10/11 for ANTIC mode F, console/trigger input,
   and an Atari-inspired palette
 - basic player/missile DMA or direct-GRAF rendering with positions, sizes,
-  two-bit missile shifters, VDELAY, fifth-player and multicolor priority mixing, sticky collision
-  latches, HITCLR, and latched joystick triggers
+  two-bit missile shifters, VDELAY, fifth-player and multicolor priority mixing,
+  sticky collision latches, HITCLR, and latched joystick triggers
 - PIA joystick and PORTB registers
-- POKEY keyboard and SKCTL-controlled polynomial RANDOM register; AUDCTL-aware 15/64/1790 kHz and joined
-  per-channel audio-divider and timer countdowns and IRQ edges; CPU-synchronized
-  register playback and sample buffering; CPU-clocked pure-tone and reference-tap polynomial distortion/noise;
+- POKEY keyboard and SKCTL-controlled polynomial RANDOM register; AUDCTL-aware
+  15/64/1790 kHz and joined per-channel audio-divider and timer countdowns and
+  IRQ edges; CPU-synchronized register playback and sample buffering;
+  CPU-clocked pure-tone and reference-tap polynomial distortion/noise;
   cycle-averaged output sampling; latched high-pass; volume-only audio; linear
   four-bit channel-volume mixing with output headroom; and DC filtering
 - read-only ATR parsing, sector access, and an XL OS SIOV acceleration for
@@ -38,16 +39,20 @@ useful as a compact core to read and extend.
 - segmented XEX loading with ordered INITAD execution and RUNAD handoff after
   OS startup
 - SDL2 video, audio, keyboard, joystick-key, and console-key frontend
+- optional WASMCART packaging of a XEX with framebuffer, audio, joystick,
+  console-button, and keyboard adapters
 
 Important current limits: ANTIC/GTIA and DMA steals are scanline approximations
-rather than cycle-exact; precise scrolling fetch windows,
-serial SIO command transport at the POKEY bit level, cartridges, save states,
-and unstable undocumented CPU instructions are not implemented. POKEY serial
-timing, analog-accurate DAC mixing, and fractional-cycle resampling remain
-approximations. The SDL frontend queues one audio block per emulated frame and
-starts playback after a small initial buffer, keeping POKEY register writes
-synchronized without generating future audio. The SIOV acceleration lets the stock
-XL OS boot compatible ATR images without bit-level serial emulation.
+rather than cycle-exact; precise scrolling fetch windows, serial SIO command
+transport at the POKEY bit level, Atari cartridge images, save states, and
+unstable undocumented CPU instructions are not implemented. WASMCART is a host
+package for the existing XEX loader, not emulation of an Atari cartridge.
+POKEY serial timing, analog-accurate DAC mixing, and fractional-cycle
+resampling remain approximations. The SDL frontend queues one audio block per
+emulated frame and starts playback after a small initial buffer, keeping POKEY
+register writes synchronized without generating future audio. The SIOV
+acceleration lets the stock XL OS boot compatible ATR images without bit-level
+serial emulation.
 Display-list state, playfield data, colors, character-base, player/missile
 data, and collisions now advance one scanline at a time. Register changes
 within a scanline are still approximated at its ending boundary.
@@ -62,18 +67,23 @@ playfield DMA within 4 KiB, promotes and clips horizontal-scroll fetches,
 handles vertical-scroll entry and exit rows, and applies GTIA modes 9, 10, and
 11 to ANTIC character modes 2/3 as well as mode F.
 
-The remaining priorities are:
+The remaining priorities, in recommended order, are:
 
-1. Refine CPU/ANTIC timing beyond the current scanline DMA budget and
+1. Turn the representative XEX set used during development into a repeatable
+   regression corpus. Extend validation beyond the current blank-frame check
+   with selected-frame hashes or reference captures, plus audio sample-count,
+   peak, and transition summaries. Cover NTSC and PAL where applicable before
+   removing or substantially rewriting implemented behavior.
+2. Refine CPU/ANTIC timing beyond the current scanline DMA budget and
    instruction-overrun carry;
    page-crossing penalties, stable undocumented opcode families,
    playfield/character/PMG steals, and master-clock advancement during CPU
    pauses are implemented. Memory-refresh steals are omitted until their fixed
    within-scanline placement can be represented without distorting DLI timing.
-2. Refine POKEY serial timing and analog mixing beyond the current per-channel
+3. Refine POKEY serial timing and analog mixing beyond the current per-channel
    timer IRQs, CPU-synchronized writes, reference polynomial phases,
    joined-channel handling, high-pass latches, and linear volume response.
-3. Model same-scanline player/missile repositioning and shift-register
+4. Model same-scanline player/missile repositioning and shift-register
    retrigger behavior only when a compatibility test demonstrates a need; the
    current sample set does not justify a raster-event subsystem yet.
 
@@ -221,9 +231,11 @@ for invalid arguments or ROM/media/output errors. A completed capture returns
 1 when every framebuffer pixel has the same color and 0 when the frame contains
 more than one color, making the command directly usable in automated program
 smoke tests. When the frame is blank (a single color), a file requested with
-`--output` is not written. `--xex-frame N` overrides the default frame-85 XEX handoff;
-`--start-frame N` presses START for one frame; and `--trace-audio` reports POKEY
-register changes.
+`--output` is not written. `--xex-frame N` overrides the default frame-85 XEX
+handoff; `--start-frame N` presses START for one frame; and `--trace-audio`
+reports POKEY register changes. The blank-frame result is a smoke test, not a
+complete visual regression check; the regression-corpus priority above is
+intended to cover nonblank-but-incorrect output.
 
 ## Provenance
 
