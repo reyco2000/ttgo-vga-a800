@@ -95,6 +95,9 @@ uint8_t Atari_Read(Atari *a, uint16_t p) {
 #ifndef NO_BASIC
   if (p >= 0xa000 && p < 0xc000 && !(portb & 2))
     return a->basic[p - 0xa000];
+#else
+  if (p >= 0xa000 && p < 0xc000 && !(portb & 2))
+    return 0;
 #endif
   if (p >= 0x5000 && p < 0x5800 && (portb & 1) && !(portb & 0x80))
     return a->os[0x1000 + p - 0x5000];
@@ -121,10 +124,8 @@ void Atari_Write(Atari *a, uint16_t p, uint8_t v) {
   uint8_t pb = Atari_PortB(a);
   if (p >= 0xc000 && (pb & 1))
     return;
-#ifndef NO_BASIC
   if (p >= 0xa000 && p < 0xc000 && !(pb & 2))
     return;
-#endif
   a->ram[p] = v;
 }
 void Atari_Frame(Atari *a) {

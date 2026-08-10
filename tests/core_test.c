@@ -116,6 +116,16 @@ int main(void) {
   Pia_Write(&a, 0xd303, 4);
   Pia_Write(&a, 0xd301, 0xfd);
   assert(Atari_PortB(&a) == 0xfd);
+  a.ram[0xa000] = 0x5a;
+  Atari_Write(&a, 0xa000, 0xa5);
+#ifdef NO_BASIC
+  assert(Atari_Read(&a, 0xa000) == 0);
+#else
+  assert(Atari_Read(&a, 0xa000) == a.basic[0]);
+#endif
+  assert(a.ram[0xa000] == 0x5a);
+  Pia_Write(&a, 0xd301, 0xff);
+  assert(Atari_Read(&a, 0xa000) == 0x5a);
   a.pokey_irqst = 0xff;
   a.pokey_irqen = 0;
   Pokey_Write(&a, 0xd20e, 0x40);
