@@ -45,6 +45,9 @@ struct Atari {
   double audio_poly_phase, audio_previous, audio_filter;
   uint32_t audio_poly4, audio_poly5, audio_poly9, audio_poly17;
   uint8_t audio_output[4], audio_hp[2];
+  int audio_rate, audio_len, audio_clocks;
+  double audio_sum;
+  int16_t audio_buffer[8192];
   uint64_t pokey_timer_base, pokey_timer_count[4];
   uint8_t *disk;
   size_t disk_size;

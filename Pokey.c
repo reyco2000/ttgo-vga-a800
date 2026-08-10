@@ -95,6 +95,8 @@ void Pokey_Write(Atari *a, uint16_t address, uint8_t value) {
       memset(a->audio_phase, 0, sizeof(a->audio_phase));
       memset(a->audio_output, 0, sizeof(a->audio_output));
       memset(a->audio_hp, 0, sizeof(a->audio_hp));
+      a->audio_len = a->audio_clocks = 0;
+      a->audio_sum = 0;
     }
     return;
   }
@@ -113,6 +115,7 @@ void Pokey_Write(Atari *a, uint16_t address, uint8_t value) {
   if (r == 10)
     a->pokey_skstat |= 0xe0;
 }
+static double audio_cycle(Atari *a);
 void Pokey_Advance(Atari *a, int cycles) {
   /* Channels 1, 2 and 4 assert their matching IRQST bit on underflow. */
   static const uint8_t bits[4] = {1, 2, 0, 4};
@@ -131,6 +134,27 @@ void Pokey_Advance(Atari *a, int cycles) {
       a->pokey_timer_count[ch] = left;
     }
   a->irq = (uint8_t)(a->pokey_irqst | ~a->pokey_irqen) != 0xff;
+  if (a->audio_rate > 0)
+    for (int i = 0; i < cycles; i++) {
+      a->audio_sum += audio_cycle(a);
+      a->audio_clocks++;
+      a->audio_poly_phase += a->audio_rate;
+      if (a->audio_poly_phase >= a->cpu_hz) {
+        a->audio_poly_phase -= a->cpu_hz;
+        double sum = a->audio_sum / a->audio_clocks;
+        a->audio_sum = 0;
+        a->audio_clocks = 0;
+        double filtered = sum - a->audio_previous + 0.995 * a->audio_filter;
+        a->audio_previous = sum;
+        a->audio_filter = filtered;
+        if (filtered > 40)
+          filtered = 40;
+        if (filtered < -40)
+          filtered = -40;
+        if (a->audio_len < 8192)
+          a->audio_buffer[a->audio_len++] = (int16_t)(filtered * 500.0);
+      }
+    }
 }
 static double audio_cycle(Atari *a) {
   if (a->pokey_skctl & 3)
@@ -169,6 +193,8 @@ static double audio_cycle(Atari *a) {
     int vol = ctl & 15, joined_low = (ch == 0 && (a->pokey[8] & 0x10)) ||
                                      (ch == 2 && (a->pokey[8] & 8));
     int signal = joined_low ? 0 : a->audio_output[ch];
+    if (ch == 0 && (a->pokey_skctl & 8))
+      signal &= a->audio_output[1];
     if (ch < 2 && ((a->pokey[8] >> (2 - ch)) & 1))
       signal ^= a->audio_hp[ch];
     if (vol && ((ctl & 0x10) || signal))
@@ -179,29 +205,23 @@ static double audio_cycle(Atari *a) {
 void Pokey_Audio(Atari *a, int16_t *out, int count, int rate) {
   if (rate <= 0)
     return;
-  if (!a->audio_poly4) {
+  a->audio_rate = rate;
+  if (!out || count <= 0)
+    return;
+  if (a->audio_poly4 == 0 && a->audio_poly5 == 0 && a->audio_poly9 == 0 &&
+      a->audio_poly17 == 0) {
     a->audio_poly4 = 1;
     a->audio_poly5 = 1;
     a->audio_poly9 = 1;
     a->audio_poly17 = 1;
   }
-  for (int n = 0; n < count; n++) {
-    double sum = 0;
-    a->audio_poly_phase += (double)a->cpu_hz / rate;
-    int clocks = (int)a->audio_poly_phase;
-    a->audio_poly_phase -= clocks;
-    for (int i = 0; i < clocks; i++)
-      sum += audio_cycle(a);
-    if (clocks)
-      sum /= clocks;
-    /* POKEY is a unipolar DAC; remove its DC component before SDL output. */
-    double filtered = sum - a->audio_previous + 0.995 * a->audio_filter;
-    a->audio_previous = sum;
-    a->audio_filter = filtered;
-    if (filtered > 40)
-      filtered = 40;
-    if (filtered < -40)
-      filtered = -40;
-    out[n] = (int16_t)(filtered * 500.0);
-  }
+  int n = count < a->audio_len ? count : a->audio_len;
+  memcpy(out, a->audio_buffer, (size_t)n * sizeof(*out));
+  if (n < a->audio_len)
+    memmove(a->audio_buffer, a->audio_buffer + n,
+            (size_t)(a->audio_len - n) * sizeof(*out));
+  a->audio_len -= n;
+  int16_t hold = n ? out[n - 1] : 0;
+  while (n < count)
+    out[n++] = hold;
 }

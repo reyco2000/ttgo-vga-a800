@@ -131,6 +131,8 @@ int main(void) {
   Pokey_Write(&a, 0xd200, 10);
   Pokey_Write(&a, 0xd201, 0xaf);
   int16_t audio[512];
+  Pokey_Audio(&a, NULL, 0, 44100);
+  Pokey_Advance(&a, 21000);
   Pokey_Audio(&a, audio, 512, 44100);
   int changes = 0;
   for (int i = 1; i < 512; i++)
@@ -142,6 +144,8 @@ int main(void) {
   loud.pokey_skctl = 3;
   for (int ch = 0; ch < 4; ch++)
     Pokey_Write(&loud, (uint16_t)(0xd201 + ch * 2), 0x1f);
+  Pokey_Audio(&loud, NULL, 0, 44100);
+  Pokey_Advance(&loud, 21000);
   Pokey_Audio(&loud, audio, 512, 44100);
   int peak = 0;
   for (int i = 0; i < 512; i++) {
@@ -153,6 +157,7 @@ int main(void) {
   Pokey_Write(&a, 0xd200, 0);
   Pokey_Write(&a, 0xd201, 0xa8);
   int16_t ultrasonic[4096];
+  Pokey_Advance(&a, 166000);
   Pokey_Audio(&a, ultrasonic, 4096, 44100);
   for (int i = 0; i < 4096; i++)
     assert(ultrasonic[i] <= 20000 && ultrasonic[i] >= -20000);
@@ -169,13 +174,14 @@ int main(void) {
   Pokey_Write(&sweep, 0xd200, 9);
   Pokey_Write(&sweep, 0xd201, 0xaf);
   Pokey_Write(&sweep, 0xd208, 0x40);
-  Pokey_Audio(&sweep, audio, 5, 100);
+  Pokey_Audio(&sweep, NULL, 0, 100);
+  Pokey_Advance(&sweep, 5);
   assert(!sweep.audio_output[0]);
   sweep.cycles = 5;
   Pokey_Write(&sweep, 0xd200, 0);
-  Pokey_Audio(&sweep, audio, 4, 100);
+  Pokey_Advance(&sweep, 4);
   assert(!sweep.audio_output[0]);
-  Pokey_Audio(&sweep, audio, 4, 100);
+  Pokey_Advance(&sweep, 4);
   assert(sweep.audio_output[0]);
   Atari timed;
   a.pokey_irqst = 0xff;

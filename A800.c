@@ -178,6 +178,8 @@ int main(int argc, char **argv) {
   SDL_AudioDeviceID dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
   double audio_due = 0;
   int audio_playing = 0;
+  if (dev)
+    Pokey_Audio(&a, NULL, 0, have.freq);
   int run = 1, boot_frames = 0;
   while (run) {
     int frames_run = 1;
@@ -224,11 +226,19 @@ int main(int argc, char **argv) {
         audio_playing = 1;
       }
     }
-    double elapsed = (double)(SDL_GetPerformanceCounter() - start) /
-                     SDL_GetPerformanceFrequency(),
-           target = 1.0 / a.frame_rate;
-    if (elapsed < target)
-      SDL_Delay((uint32_t)((target - elapsed) * 1000.0));
+    if (dev && audio_playing) {
+      uint32_t target = have.samples * 2u * sizeof(int16_t),
+               started = SDL_GetTicks();
+      while (SDL_GetQueuedAudioSize(dev) > target &&
+             SDL_GetTicks() - started <= 32)
+        SDL_Delay(1);
+    } else {
+      double elapsed = (double)(SDL_GetPerformanceCounter() - start) /
+                       SDL_GetPerformanceFrequency(),
+             target = 1.0 / a.frame_rate;
+      if (elapsed < target)
+        SDL_Delay((uint32_t)((target - elapsed) * 1000.0));
+    }
   }
   if (dev)
     SDL_CloseAudioDevice(dev);

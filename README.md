@@ -29,8 +29,8 @@ useful as a compact core to read and extend.
   latches, HITCLR, and latched joystick triggers
 - PIA joystick and PORTB registers
 - POKEY keyboard and SKCTL-controlled polynomial RANDOM register; AUDCTL-aware 15/64/1790 kHz and joined
-  per-channel audio-divider and timer countdowns and IRQ edges; frame-snapshot
-  register playback; CPU-clocked pure-tone and reference-tap polynomial distortion/noise;
+  per-channel audio-divider and timer countdowns and IRQ edges; CPU-synchronized
+  register playback and sample buffering; CPU-clocked pure-tone and reference-tap polynomial distortion/noise;
   cycle-averaged output sampling; latched high-pass; volume-only audio; linear
   four-bit channel-volume mixing with output headroom; and DC filtering
 - read-only ATR parsing, sector access, and an XL OS SIOV acceleration for
@@ -71,7 +71,7 @@ The remaining priorities are:
    pauses are implemented. Memory-refresh steals are omitted until their fixed
    within-scanline placement can be represented without distorting DLI timing.
 2. Refine POKEY serial timing and analog mixing beyond the current per-channel
-   timer IRQs, frame-snapshot writes, reference polynomial phases,
+   timer IRQs, CPU-synchronized writes, reference polynomial phases,
    joined-channel handling, high-pass latches, and linear volume response.
 3. Model same-scanline player/missile repositioning and shift-register
    retrigger behavior only when a compatibility test demonstrates a need; the
