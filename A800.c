@@ -147,7 +147,7 @@ int main(int argc, char **argv) {
       xex = media;
   }
   Atari a;
-  int r = Atari_Init(&a, os, basic);
+  int r = Atari_Init(&a, os, use_basic ? basic : NULL);
   if (r) {
     fprintf(stderr, "a800: cannot load %s (%s)\n", r == -1 ? os : basic,
             r == -1 ? "expected 16384 bytes" : "expected 8192 bytes");

@@ -133,7 +133,12 @@ WC_EXPORT wc_info_t *wc_get_info(void) {
 }
 
 WC_EXPORT_INIT void wc_init(void) {
-  if (Atari_Init(&machine, "ATARIXL.ROM", "ATARIBAS.ROM"))
+#ifdef WASMCART_BASIC
+  const char *basic = "ATARIBAS.ROM";
+#else
+  const char *basic = NULL;
+#endif
+  if (Atari_Init(&machine, "ATARIXL.ROM", basic))
     return;
   Atari_SetVideoStandard(&machine, A800_NTSC);
   int rate = wc_host_info.audio_sample_rate

@@ -1,27 +1,40 @@
 #!/usr/bin/env python3
 """Build the compact a800 core and package one XEX as a wasmcart cartridge."""
+import argparse
 import os
 import shutil
 import subprocess
-import sys
 import tempfile
 
 
 def main():
-    if len(sys.argv) < 3:
-        print("Usage: python3 xex2wasc.py <input.xex> <output.wasc> [game_name]")
-        return 1
+    parser = argparse.ArgumentParser(
+        description="Package an Atari XEX as an a800 WASMCART cartridge"
+    )
+    parser.add_argument(
+        "-b",
+        "--basic",
+        action="store_true",
+        help="include and load ATARIBAS.ROM",
+    )
+    parser.add_argument("input_xex")
+    parser.add_argument("output_wasc")
+    parser.add_argument("game_name", nargs="?")
+    args = parser.parse_args()
     source_dir = os.path.dirname(os.path.abspath(__file__))
-    input_xex = os.path.abspath(sys.argv[1])
-    output_wasc = os.path.abspath(sys.argv[2])
-    game_name = sys.argv[3] if len(sys.argv) > 3 else os.path.splitext(os.path.basename(input_xex))[0]
+    input_xex = os.path.abspath(args.input_xex)
+    output_wasc = os.path.abspath(args.output_wasc)
+    game_name = args.game_name or os.path.splitext(os.path.basename(input_xex))[0]
     if not os.path.isfile(input_xex):
         print(f"Error: input XEX not found: {input_xex}")
         return 1
-    assets = {name: os.path.join(source_dir, name) for name in ("ATARIBAS.ROM", "ATARIXL.ROM")}
+    names = ["ATARIXL.ROM"]
+    if args.basic:
+        names.append("ATARIBAS.ROM")
+    assets = {name: os.path.join(source_dir, name) for name in names}
     missing = [path for path in assets.values() if not os.path.isfile(path)]
     if missing:
-        print("Error: ATARIBAS.ROM and ATARIXL.ROM must be in the a800 directory")
+        print("Error: required ROM file not found: " + ", ".join(missing))
         return 1
     wasm = os.path.join(source_dir, "cart.wasm")
     command = [
@@ -33,12 +46,15 @@ def main():
         "-o", wasm, "6502.c", "Atari.c", "Antic.c", "AtariIo.c", "Gtia.c",
         "Pia.c", "Pokey.c", "wasmcart_main.c", "-lm",
     ]
+    if args.basic:
+        command.insert(3, "-DWASMCART_BASIC")
     temporary = tempfile.mkdtemp(prefix="a800-wasc-")
     try:
         print("Compiling a800 wasm cartridge...")
         subprocess.run(command, cwd=source_dir, check=True)
-        shutil.copy(assets["ATARIBAS.ROM"], os.path.join(temporary, "ATARIBAS.ROM"))
         shutil.copy(assets["ATARIXL.ROM"], os.path.join(temporary, "ATARIXL.ROM"))
+        if args.basic:
+            shutil.copy(assets["ATARIBAS.ROM"], os.path.join(temporary, "ATARIBAS.ROM"))
         shutil.copy(input_xex, os.path.join(temporary, "game.xex"))
         subprocess.run([
             "npx", "wasmcart-pack", "--wasm", wasm, "--assets", temporary,

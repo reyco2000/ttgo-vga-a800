@@ -82,7 +82,7 @@ int main(int argc, char **argv) {
     return 2;
   }
   Atari a;
-  if (Atari_Init(&a, os, basic_rom)) {
+  if (Atari_Init(&a, os, basic ? basic_rom : NULL)) {
     fprintf(stderr, "a800-validate: ROM load failed\n");
     return 2;
   }

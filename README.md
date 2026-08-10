@@ -149,10 +149,10 @@ excluded for a strictly documented instruction set with
 
 ## Run
 
-Provide exact-size Atari XL ROM dumps (not included):
+Provide an exact-size Atari XL OS ROM dump (not included):
 
 - `ATARIXL.ROM` — 16 KiB
-- `ATARIBAS.ROM` — 8 KiB
+- `ATARIBAS.ROM` — optional 8 KiB BASIC ROM, loaded only with `-b`
 
 ```sh
 ./build/a800
@@ -165,7 +165,8 @@ Provide exact-size Atari XL ROM dumps (not included):
 ```
 
 Without `-b`, BASIC is disabled for normal boot. XEX startup performs the XL
-OS initialization needed by programs, transfers control while the CPU is still
+OS initialization needed by programs, and the BASIC ROM is not read even when
+it exists. XEX startup transfers control while the CPU is still
 executing OS code, disables the BASIC bank at handoff, and temporarily holds
 OPTION for executables that invoke the XL warm-start path. During that launch
 window, a warm start with a RAM `DOSINI` hook transfers to the hook directly;
@@ -205,6 +206,7 @@ WASMCART-specific code out of the native core build:
 
 ```sh
 python3 xex2wasc.py game.xex game.wasc "Game name"
+python3 xex2wasc.py -b game.xex game-with-basic.wasc "Game name"
 ```
 
 See [WASMCART.md](WASMCART.md) for prerequisites, assets, and exported devices.
