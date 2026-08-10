@@ -29,10 +29,10 @@ useful as a compact core to read and extend.
   latches, HITCLR, and latched joystick triggers
 - PIA joystick and PORTB registers
 - POKEY keyboard and SKCTL-controlled polynomial RANDOM register; AUDCTL-aware 15/64/1790 kHz and joined
-  per-channel timer countdowns and IRQ edges; cycle-timestamped register
-  writes; pure-tone, reference-tap
-  polynomial distortion/noise, latched high-pass, volume-only audio, compact
-  nonlinear mixing, and DC and ultrasonic-alias filtering
+  per-channel audio-divider and timer countdowns and IRQ edges; frame-snapshot
+  register playback; CPU-clocked pure-tone and reference-tap polynomial distortion/noise;
+  cycle-averaged output sampling; latched high-pass; volume-only audio; linear
+  four-bit channel-volume mixing with output headroom; and DC filtering
 - read-only ATR parsing, sector access, and an XL OS SIOV acceleration for
   disk status and reads
 - segmented XEX loading with ordered INITAD execution and RUNAD handoff after
@@ -43,9 +43,10 @@ Important current limits: ANTIC/GTIA and DMA steals are scanline approximations
 rather than cycle-exact; precise scrolling fetch windows,
 serial SIO command transport at the POKEY bit level, cartridges, save states,
 and unstable undocumented CPU instructions are not implemented. POKEY serial
-timing, analog-accurate DAC mixing, and writes within one output-sample
-interval remain approximations. The SDL frontend maintains a small
-three-frame queue to avoid host-audio underruns. The SIOV acceleration lets the stock
+timing, analog-accurate DAC mixing, and fractional-cycle resampling remain
+approximations. The SDL frontend queues one audio block per emulated frame and
+starts playback after a small initial buffer, keeping POKEY register writes
+synchronized without generating future audio. The SIOV acceleration lets the stock
 XL OS boot compatible ATR images without bit-level serial emulation.
 Display-list state, playfield data, colors, character-base, player/missile
 data, and collisions now advance one scanline at a time. Register changes
@@ -70,8 +71,8 @@ The remaining priorities are:
    pauses are implemented. Memory-refresh steals are omitted until their fixed
    within-scanline placement can be represented without distorting DLI timing.
 2. Refine POKEY serial timing and analog mixing beyond the current per-channel
-   timer IRQs, cycle-timestamped writes, reference polynomial phases,
-   joined-channel handling, high-pass latches, and compact nonlinear response.
+   timer IRQs, frame-snapshot writes, reference polynomial phases,
+   joined-channel handling, high-pass latches, and linear volume response.
 3. Model same-scanline player/missile repositioning and shift-register
    retrigger behavior only when a compatibility test demonstrates a need; the
    current sample set does not justify a raster-event subsystem yet.
@@ -86,12 +87,6 @@ larger automated program corpus and focused hardware tests show no meaningful
 compatibility loss. They should not be removed based only on the current small
 sample set:
 
-- The timestamped POKEY audio-event ring could become a smaller fixed queue, or
-  frame-level register snapshots, if rapid register-write tests sound and hash
-  equivalently. This would reduce per-machine state and audio bookkeeping.
-- The compact nonlinear POKEY mixer could return to a linear sum if recorded
-  output comparisons show no useful improvement. Polynomial distortion,
-  joined timers, and DC filtering can remain independent of that choice.
 - Per-channel POKEY timer countdowns could use calculated absolute deadlines if
   timer IRQ tests confirm identical STIMER, AUDCTL, and AUDF behavior.
 - Cross-scanline CPU overrun debt could be folded into the scanline DMA budget

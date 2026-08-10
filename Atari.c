@@ -47,13 +47,9 @@ void Atari_Reset(Atari *a) {
   memset(a->pokey_timer_count, 0, sizeof(a->pokey_timer_count));
   memset(a->audio_phase, 0, sizeof(a->audio_phase));
   memset(a->audio_output, 0, sizeof(a->audio_output));
-  memset(a->audio_regs, 0, sizeof(a->audio_regs));
   memset(a->audio_hp, 0, sizeof(a->audio_hp));
-  a->audio_poly_phase = a->audio_previous = a->audio_filter =
-      a->audio_render_cycle = 0;
+  a->audio_poly_phase = a->audio_previous = a->audio_filter = 0;
   a->audio_poly4 = a->audio_poly5 = a->audio_poly9 = a->audio_poly17 = 1;
-  a->audio_event_read = a->audio_event_write = a->audio_skctl =
-      a->audio_started = 0;
   a->pokey_timer_base = a->pokey_random_cycle = 0;
   a->rng = a->pokey_random_poly9 = 1;
   a->pokey_irqen = a->pokey_skctl = 0;

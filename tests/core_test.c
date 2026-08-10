@@ -136,27 +136,48 @@ int main(void) {
   for (int i = 1; i < 512; i++)
     changes += audio[i] != audio[i - 1];
   assert(changes > 10);
+  Atari loud;
+  memset(&loud, 0, sizeof(loud));
+  loud.cpu_hz = 1789772;
+  loud.pokey_skctl = 3;
+  for (int ch = 0; ch < 4; ch++)
+    Pokey_Write(&loud, (uint16_t)(0xd201 + ch * 2), 0x1f);
+  Pokey_Audio(&loud, audio, 512, 44100);
+  int peak = 0;
+  for (int i = 0; i < 512; i++) {
+    int sample = audio[i] < 0 ? -audio[i] : audio[i];
+    if (sample > peak)
+      peak = sample;
+  }
+  assert(peak > 18000 && peak <= 20000);
   Pokey_Write(&a, 0xd200, 0);
   Pokey_Write(&a, 0xd201, 0xa8);
   int16_t ultrasonic[4096];
   Pokey_Audio(&a, ultrasonic, 4096, 44100);
-  assert(ultrasonic[4095] < 100 && ultrasonic[4095] > -100);
+  for (int i = 0; i < 4096; i++)
+    assert(ultrasonic[i] <= 20000 && ultrasonic[i] >= -20000);
   a.audio_phase[0] = .5;
   a.audio_output[0] = 1;
   Pokey_Write(&a, 0xd209, 0);
-  Pokey_Audio(&a, audio, 1, 44100);
-  assert(a.audio_event_read == a.audio_event_write && a.audio_phase[0] < .5);
+  assert(a.audio_phase[0] > 0);
+  assert(!a.audio_output[0] && !a.audio_output[1] && a.audio_output[2] &&
+         a.audio_output[3]);
+  Atari sweep;
+  memset(&sweep, 0, sizeof(sweep));
+  sweep.cpu_hz = 100;
+  sweep.pokey_skctl = 3;
+  Pokey_Write(&sweep, 0xd200, 9);
+  Pokey_Write(&sweep, 0xd201, 0xaf);
+  Pokey_Write(&sweep, 0xd208, 0x40);
+  Pokey_Audio(&sweep, audio, 5, 100);
+  assert(!sweep.audio_output[0]);
+  sweep.cycles = 5;
+  Pokey_Write(&sweep, 0xd200, 0);
+  Pokey_Audio(&sweep, audio, 4, 100);
+  assert(!sweep.audio_output[0]);
+  Pokey_Audio(&sweep, audio, 4, 100);
+  assert(sweep.audio_output[0]);
   Atari timed;
-  memset(&timed, 0, sizeof(timed));
-  timed.cpu_hz = 1000;
-  timed.pokey_skctl = 3;
-  Pokey_Write(&timed, 0xd200, 1);
-  timed.cycles = 1500;
-  Pokey_Write(&timed, 0xd200, 9);
-  Pokey_Audio(&timed, audio, 1, 1);
-  assert(timed.audio_regs[0] == 1);
-  Pokey_Audio(&timed, audio, 1, 1);
-  assert(timed.audio_regs[0] == 9);
   a.pokey_irqst = 0xff;
   Pokey_Write(&a, 0xd200, 0);
   Pokey_Write(&a, 0xd208, 0x40);

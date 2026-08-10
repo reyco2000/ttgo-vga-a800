@@ -176,10 +176,11 @@ int main(int argc, char **argv) {
   want.channels = 1;
   want.samples = 1024;
   SDL_AudioDeviceID dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
-  if (dev)
-    SDL_PauseAudioDevice(dev, 0);
+  double audio_due = 0;
+  int audio_playing = 0;
   int run = 1, boot_frames = 0;
   while (run) {
+    int frames_run = 1;
     uint64_t start = SDL_GetPerformanceCounter();
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
@@ -194,8 +195,10 @@ int main(int argc, char **argv) {
     if (xex && ++boot_frames == A800_XEX_BOOT_FRAMES) {
       if (Atari_LoadExecutable(&a, xex))
         fprintf(stderr, "a800: cannot load executable %s\n", xex);
-      else
+      else {
         Atari_Frame(&a);
+        frames_run++;
+      }
       xex = NULL;
     }
     if (!xex) {
@@ -205,14 +208,20 @@ int main(int argc, char **argv) {
       SDL_RenderPresent(ren);
     }
     if (dev) {
-      int count = (int)(have.freq / a.frame_rate + .5);
+      audio_due += frames_run * have.freq / a.frame_rate;
+      int count = (int)audio_due;
+      audio_due -= count;
       int16_t samples[1024];
-      if (count > 1024)
-        count = 1024;
-      uint32_t chunk = (uint32_t)count * sizeof(*samples), target = chunk * 3;
-      while (SDL_GetQueuedAudioSize(dev) < target) {
-        Pokey_Audio(&a, samples, count, have.freq);
-        SDL_QueueAudio(dev, samples, chunk);
+      while (count) {
+        int n = count > 1024 ? 1024 : count;
+        Pokey_Audio(&a, samples, n, have.freq);
+        SDL_QueueAudio(dev, samples, (uint32_t)n * sizeof(*samples));
+        count -= n;
+      }
+      if (!audio_playing &&
+          SDL_GetQueuedAudioSize(dev) >= have.samples * 2u * sizeof(*samples)) {
+        SDL_PauseAudioDevice(dev, 0);
+        audio_playing = 1;
       }
     }
     double elapsed = (double)(SDL_GetPerformanceCounter() - start) /
