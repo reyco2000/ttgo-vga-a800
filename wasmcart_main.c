@@ -146,7 +146,11 @@ WC_EXPORT_INIT void wc_init(void) {
   option_boot_frames = !basic_available;
   if (Atari_Init(&machine, "ATARIXL.ROM", basic))
     return;
+#ifdef WASMCART_PAL
+  Atari_SetVideoStandard(&machine, A800_PAL);
+#else
   Atari_SetVideoStandard(&machine, A800_NTSC);
+#endif
   int rate = wc_host_info.audio_sample_rate
                  ? (int)wc_host_info.audio_sample_rate
                  : 48000;

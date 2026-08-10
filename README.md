@@ -211,6 +211,7 @@ core build:
 
 ```sh
 python3 xex2wasc.py game.xex game.wasc "Game name"
+python3 xex2wasc.py --pal game.xex game-pal.wasc "Game name"
 python3 xex2wasc.py -b game.xex game-with-basic.wasc "Game name"
 ```
 

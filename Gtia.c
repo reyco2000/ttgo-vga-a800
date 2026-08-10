@@ -2,7 +2,15 @@
 #include "Palette.h"
 
 const uint32_t *Gtia_Palette(AtariVideoStandard standard) {
+#if defined(WASMCART_PAL)
+  (void)standard;
+  return pal_palette;
+#elif defined(WASMCART_NTSC)
+  (void)standard;
+  return ntsc_palette;
+#else
   return standard == A800_PAL ? pal_palette : ntsc_palette;
+#endif
 }
 uint8_t Gtia_Read(Atari *a, uint16_t address) {
   unsigned r = address & 31;

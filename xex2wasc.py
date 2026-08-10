@@ -17,6 +17,11 @@ def main():
         action="store_true",
         help="include and load ATARIBAS.ROM",
     )
+    video = parser.add_mutually_exclusive_group()
+    video.add_argument("--pal", action="store_true", help="build a PAL cartridge")
+    video.add_argument(
+        "--ntsc", action="store_true", help="build an NTSC cartridge (default)"
+    )
     parser.add_argument("input_xex")
     parser.add_argument("output_wasc")
     parser.add_argument("game_name", nargs="?")
@@ -38,7 +43,11 @@ def main():
         return 1
     wasm = os.path.join(source_dir, "cart.wasm")
     command = [
-        "emcc", "-O3", "-DWASMCART", "-I.",
+        "emcc",
+        "-O3",
+        "-DWASMCART",
+        "-DWASMCART_PAL" if args.pal else "-DWASMCART_NTSC",
+        "-I.",
         "-s", "WASM=1", "-s", "SIDE_MODULE=0", "-s", "ALLOW_MEMORY_GROWTH=1",
         "-s", "INITIAL_MEMORY=33554432",
         "-s", 'EXPORTED_FUNCTIONS=["_wc_get_info","_wc_init","_wc_render"]',
@@ -47,7 +56,7 @@ def main():
         "Pia.c", "Pokey.c", "wasmcart_main.c", "-lm",
     ]
     if args.basic:
-        command.insert(3, "-DWASMCART_BASIC")
+        command.insert(4, "-DWASMCART_BASIC")
     temporary = tempfile.mkdtemp(prefix="a800-wasc-")
     try:
         print("Compiling a800 wasm cartridge...")
