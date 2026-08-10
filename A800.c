@@ -55,7 +55,8 @@ static uint8_t keycode(SDL_Keycode k, SDL_Keymod mod) {
     return 0xff;
   }
 }
-static void input(Atari *a, const SDL_Event *e, int down) {
+static void input(Atari *a, const SDL_Event *e, int down, int use_basic,
+                  int *option_boot_frames) {
   SDL_Keycode k = e->key.keysym.sym;
   uint8_t bit = 0;
   if (k == SDLK_UP)
@@ -100,6 +101,10 @@ static void input(Atari *a, const SDL_Event *e, int down) {
   }
   if (k == SDLK_F5 && down) {
     Atari_Reset(a);
+    if (!use_basic) {
+      a->console &= (uint8_t)~4;
+      *option_boot_frames = 1;
+    }
     return;
   }
   if (k == SDLK_F8 && down) {
@@ -154,8 +159,9 @@ int main(int argc, char **argv) {
     return 1;
   }
   Atari_SetVideoStandard(&a, standard);
-  if (!use_basic && !xex)
-    a.console &= (uint8_t)~4;
+  int option_boot_frames = 0;
+  if (!use_basic)
+    a.console &= (uint8_t)~4, option_boot_frames = 1;
   if (media && !xex && Atari_LoadDisk(&a, media))
     fprintf(stderr, "a800: warning: cannot mount %s\n", media);
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_EVENTS)) {
@@ -189,11 +195,13 @@ int main(int argc, char **argv) {
       if (e.type == SDL_QUIT)
         run = 0;
       else if (e.type == SDL_KEYDOWN && !e.key.repeat)
-        input(&a, &e, 1);
+        input(&a, &e, 1, use_basic, &option_boot_frames);
       else if (e.type == SDL_KEYUP)
-        input(&a, &e, 0);
+        input(&a, &e, 0, use_basic, &option_boot_frames);
     }
     Atari_Frame(&a);
+    if (option_boot_frames && !--option_boot_frames)
+      a.console |= 4;
     if (xex && ++boot_frames == A800_XEX_BOOT_FRAMES) {
       if (Atari_LoadExecutable(&a, xex))
         fprintf(stderr, "a800: cannot load executable %s\n", xex);

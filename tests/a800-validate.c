@@ -90,8 +90,9 @@ int main(int argc, char **argv) {
   if (seconds > 0)
     frames = (int)(seconds * a.frame_rate + .5);
   int xex = media && extension_is(media, ".xex");
-  if (!basic && !xex)
-    a.console &= (uint8_t)~4;
+  int option_boot_frames = 0;
+  if (!basic)
+    a.console &= (uint8_t)~4, option_boot_frames = 1;
   if (media && !xex && Atari_LoadDisk(&a, media)) {
     fprintf(stderr, "a800-validate: media load failed: %s\n", media);
     Atari_Destroy(&a);
@@ -105,6 +106,8 @@ int main(int argc, char **argv) {
     if (frame == start_frame + 1)
       a.console |= 1;
     Atari_Frame(&a);
+    if (option_boot_frames && !--option_boot_frames)
+      a.console |= 4;
     if (xex && !loaded && frame == xex_frame - 1) {
       if (Atari_LoadExecutable(&a, media)) {
         fprintf(stderr, "a800-validate: XEX load failed: %s\n", media);

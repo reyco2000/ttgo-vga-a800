@@ -24,6 +24,7 @@ static Atari machine;
 static uint8_t *xex_data;
 static size_t xex_size;
 static unsigned boot_frames;
+static int basic_available, option_boot_frames;
 
 static uint8_t atari_key(unsigned hid, int shift) {
   static const uint8_t letters[26] = {0x3f, 0x15, 0x12, 0x3a, 0x2a, 0x38, 0x3d,
@@ -91,6 +92,8 @@ static void input(void) {
       (uint8_t)!((buttons & (WC_BTN_A | WC_BTN_B | WC_BTN_X)) ||
                  down(WC_KEY_LALT) || down(WC_KEY_RALT));
   machine.console = 7;
+  if (option_boot_frames)
+    machine.console &= ~4;
   if ((buttons & WC_BTN_START) || down(WC_KEY_F4))
     machine.console &= ~1;
   if ((buttons & WC_BTN_SELECT) || down(WC_KEY_F3))
@@ -107,6 +110,7 @@ static void input(void) {
     if (hid == WC_KEY_F5 && now) {
       int rate = machine.audio_rate;
       Atari_Reset(&machine);
+      option_boot_frames = !basic_available;
       Pokey_Audio(&machine, NULL, 0, rate);
       continue;
     }
@@ -138,6 +142,8 @@ WC_EXPORT_INIT void wc_init(void) {
 #else
   const char *basic = NULL;
 #endif
+  basic_available = basic != NULL;
+  option_boot_frames = !basic_available;
   if (Atari_Init(&machine, "ATARIXL.ROM", basic))
     return;
   Atari_SetVideoStandard(&machine, A800_NTSC);
@@ -161,6 +167,8 @@ WC_EXPORT_INIT void wc_init(void) {
 WC_EXPORT_RENDER void wc_render(void) {
   input();
   Atari_Frame(&machine);
+  if (option_boot_frames)
+    option_boot_frames--;
   if (xex_data && ++boot_frames == A800_XEX_BOOT_FRAMES) {
     if (!Atari_LoadExecutableData(&machine, xex_data, xex_size))
       Atari_Frame(&machine);

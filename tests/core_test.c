@@ -211,6 +211,11 @@ int main(void) {
   a.ram[0x0d] = 0x12;
   assert(Cpu_Step(&a) == 3);
   assert(a.pc == 0x1234);
+  const uint8_t xex[] = {0xff, 0xff, 0x00, 0x20, 0x00, 0x20, 0x60};
+  a.antic[9] = a.ram[0x2f4] = 0;
+  assert(Atari_LoadExecutableData(&a, xex, sizeof(xex)) == 0);
+  assert(a.antic[9] == 0xe0 && a.ram[0x2f4] == 0xe0);
+  assert(a.ram[0x2000] == 0x60 && a.pc == 0x2000);
   memset(a.ram + 0x300, 0, 12);
   a.ram[0x300] = 0x31;
   a.ram[0x301] = 1;

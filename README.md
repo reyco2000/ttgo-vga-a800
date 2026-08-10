@@ -166,11 +166,14 @@ Provide an exact-size Atari XL OS ROM dump (not included):
 
 Without `-b`, BASIC is disabled for normal boot. XEX startup performs the XL
 OS initialization needed by programs, and the BASIC ROM is not read even when
-it exists. XEX startup transfers control while the CPU is still
-executing OS code, disables the BASIC bank at handoff, and temporarily holds
-OPTION for executables that invoke the XL warm-start path. During that launch
-window, a warm start with a RAM `DOSINI` hook transfers to the hook directly;
-this is a compact substitute for Atari800's virtual boot-device loader. BASIC
+it exists. The no-BASIC boot pulses OPTION while the OS samples the console
+keys, and the XEX loader supplies the normal XL OS character-base default
+without depending on BASIC startup. XEX startup transfers control while the
+CPU is still executing OS code, disables the BASIC bank at handoff, and
+temporarily holds OPTION for executables that invoke the XL warm-start path.
+During that launch window, a warm start with a RAM `DOSINI` hook transfers to
+the hook directly; this is a compact substitute for Atari800's virtual
+boot-device loader. BASIC
 code is not executed and `READY` is not displayed while launching a XEX.
 
 Controls: arrows are joystick directions, Left/Right Alt is fire, F2/F3/F4

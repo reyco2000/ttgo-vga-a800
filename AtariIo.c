@@ -111,6 +111,7 @@ int Atari_LoadExecutableData(Atari *a, const uint8_t *data, size_t size) {
   a->xex_first = 0xffff;
   a->ram[9] = 1;
   a->ram[0x244] = 0;
+  a->ram[0x2f4] = a->antic[9] = 0xe0;
   a->ram[0x2e0] = a->ram[0x2e1] = a->ram[0x2e2] = a->ram[0x2e3] = 0;
   a->pia_ddr[1] = 0xff;
   a->pia[1] |= 0x83;
