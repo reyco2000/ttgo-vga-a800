@@ -1,7 +1,9 @@
 /* SDL2 frontend for the compact a800 core. */
 #include "Atari.h"
 #include "Pokey.h"
+#ifndef NO_SAVE_STATE
 #include "State.h"
+#endif
 #include <SDL.h>
 #include <stdio.h>
 #include <string.h>
@@ -109,6 +111,7 @@ static void input(Atari *a, const SDL_Event *e, int down, int use_basic,
     }
     return;
   }
+#ifndef NO_SAVE_STATE
   if (k == SDLK_F6 && down) {
     fprintf(stderr, "a800: %s state %s\n",
             State_Save(a, state_path) ? "cannot save" : "saved", state_path);
@@ -124,6 +127,7 @@ static void input(Atari *a, const SDL_Event *e, int down, int use_basic,
     }
     return;
   }
+#endif
   if (k == SDLK_F8 && down) {
     a->pokey_irqst &= 0x7f;
     if (a->pokey_irqen & 0x80)
@@ -173,10 +177,12 @@ int main(int argc, char **argv) {
 #endif
         if (!strcmp(argv[i], "--os") && i + 1 < argc)
       os = argv[++i];
+#ifndef NO_SAVE_STATE
     else if (!strcmp(argv[i], "--state") && i + 1 < argc)
       state_path = argv[++i];
     else if (!strcmp(argv[i], "--load-state") && i + 1 < argc)
       state_path = load_state = argv[++i];
+#endif
     else if (argv[i][0] == '-') {
       fprintf(stderr, "a800: unsupported option: %s\n", argv[i]);
       return 1;
@@ -191,12 +197,16 @@ int main(int argc, char **argv) {
   Atari a;
   memset(&a, 0, sizeof(a));
   int state_loaded = 0;
+#ifndef NO_SAVE_STATE
   int r = load_state ? State_Load(&a, load_state) : 0;
   if (load_state && r) {
     fprintf(stderr, "a800: cannot load state %s\n", load_state);
     return 1;
   }
   state_loaded = load_state != NULL;
+#else
+  int r = 0;
+#endif
   if (!load_state) {
 #ifdef NO_BASIC
     r = Atari_Init(&a, os, NULL);
@@ -257,6 +267,7 @@ int main(int argc, char **argv) {
         input(&a, &e, 0, use_basic, &option_boot_frames, state_path,
               &state_loaded);
     }
+#ifndef NO_SAVE_STATE
     if (state_loaded) {
       xex = NULL;
       boot_frames = 0;
@@ -269,6 +280,7 @@ int main(int argc, char **argv) {
       }
       state_loaded = 0;
     }
+#endif
     Atari_Frame(&a);
     if (option_boot_frames && !--option_boot_frames)
       a.console |= 4;

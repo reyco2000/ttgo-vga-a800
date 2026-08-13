@@ -100,6 +100,7 @@ int Atari_LoadDisk(Atari *a, const char *path) {
 int Atari_Sector(Atari *a, unsigned s, uint8_t *d, int w) {
   return AtariIo_Sector(a, s, d, w);
 }
+#ifndef NO_OPEN_EDITOR
 static void open_editor(Atari *a) {
   /* A normal XL boot opens E: before trying the boot device. Direct XEX
    * loading bypasses that step, but programs may still use its OS state. */
@@ -128,10 +129,13 @@ static void open_editor(Atari *a) {
     a->cycles += (unsigned)cycles;
   }
 }
+#endif
 int Atari_LoadExecutableData(Atari *a, const uint8_t *data, size_t size) {
   if (!data || size < 6)
     return -1;
+#ifndef NO_OPEN_EDITOR
   open_editor(a);
+#endif
   free(a->xex_data);
   a->xex_data = (uint8_t *)malloc(size);
   if (!a->xex_data)

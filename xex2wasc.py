@@ -22,6 +22,16 @@ def main():
     video.add_argument(
         "--ntsc", action="store_true", help="build an NTSC cartridge (default)"
     )
+    parser.add_argument(
+        "--save-state",
+        action="store_true",
+        help="include diagnostic save-state code (disabled by default)",
+    )
+    parser.add_argument(
+        "--no-open-editor",
+        action="store_true",
+        help="omit OS screen-editor initialization before XEX startup",
+    )
     parser.add_argument("input_xex")
     parser.add_argument("output_wasc")
     parser.add_argument("game_name", nargs="?")
@@ -57,6 +67,12 @@ def main():
     ]
     if not args.basic:
         command.insert(4, "-DNO_BASIC")
+    if args.no_open_editor:
+        command.insert(4, "-DNO_OPEN_EDITOR")
+    if args.save_state:
+        command.insert(-2, "State.c")
+    else:
+        command.insert(4, "-DNO_SAVE_STATE")
     temporary = tempfile.mkdtemp(prefix="a800-wasc-")
     try:
         print("Compiling a800 wasm cartridge...")

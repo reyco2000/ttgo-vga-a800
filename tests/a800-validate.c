@@ -1,5 +1,7 @@
 #include "Atari.h"
+#ifndef NO_SAVE_STATE
 #include "State.h"
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -44,7 +46,11 @@ static void usage(const char *name) {
 #endif
           "[--frames N|--seconds N] "
           "[--xex-frame N] [--start-frame N] [--trace-audio] [--output "
-          "frame.ppm] [--load-state FILE] [--os ROM] "
+          "frame.ppm] "
+#ifndef NO_SAVE_STATE
+          "[--load-state FILE] "
+#endif
+          "[--os ROM] "
 #ifndef NO_BASIC
           "[--basic-rom ROM] "
 #endif
@@ -94,8 +100,10 @@ int main(int argc, char **argv) {
       trace_audio = 1;
     else if (!strcmp(argv[i], "--output") && i + 1 < argc)
       output = argv[++i];
+#ifndef NO_SAVE_STATE
     else if (!strcmp(argv[i], "--load-state") && i + 1 < argc)
       load_state = argv[++i];
+#endif
     else if (!strcmp(argv[i], "--os") && i + 1 < argc)
       os = argv[++i];
     else if (argv[i][0] == '-') {
@@ -110,12 +118,15 @@ int main(int argc, char **argv) {
   }
   Atari a;
   memset(&a, 0, sizeof(a));
+#ifndef NO_SAVE_STATE
   if (load_state) {
     if (State_Load(&a, load_state)) {
       fprintf(stderr, "a800-validate: state load failed: %s\n", load_state);
       return 2;
     }
-  } else {
+  } else
+#endif
+  {
 #ifdef NO_BASIC
     if (Atari_Init(&a, os, NULL)) {
 #else

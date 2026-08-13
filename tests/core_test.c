@@ -5,7 +5,9 @@
 #include "Gtia.h"
 #include "Pia.h"
 #include "Pokey.h"
+#ifndef NO_SAVE_STATE
 #include "State.h"
+#endif
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -495,6 +497,7 @@ int main(void) {
   Atari_Frame(&timed);
   assert(timed.cycles == (uint64_t)timed.frame_lines * 114u);
   assert(timed.cpu_cycle_debt <= 2);
+#ifndef NO_SAVE_STATE
   timed.ram[0x1234] = 0x56;
   timed.audio_len = 7;
   timed.disk_size = 3;
@@ -517,6 +520,7 @@ int main(void) {
   assert(timed.xex_size == 2 && timed.xex_data[0] == 0xff &&
          timed.xex_data[1] == 0xff);
   assert(remove("core_test.state") == 0);
+#endif
   Atari_Destroy(&timed);
   return 0;
 }

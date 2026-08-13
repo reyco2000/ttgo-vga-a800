@@ -44,8 +44,8 @@ useful as a compact core to read and extend.
 
 Important current limits: ANTIC/GTIA and DMA steals are scanline approximations
 rather than cycle-exact; precise scrolling fetch windows, serial SIO command
-transport at the POKEY bit level, Atari cartridge images, save states, and
-unstable undocumented CPU instructions are not implemented. WASMCART is a host
+transport at the POKEY bit level, Atari cartridge images, portable cross-build
+save states, and unstable undocumented CPU instructions are not implemented. WASMCART is a host
 package for the existing XEX loader, not emulation of an Atari cartridge.
 POKEY serial timing, analog-accurate DAC mixing, and fractional-cycle
 resampling remain approximations. The SDL frontend queues one audio block per
@@ -87,7 +87,7 @@ The remaining priorities, in recommended order, are:
    retrigger behavior only when a compatibility test demonstrates a need; the
    current sample set does not justify a raster-event subsystem yet.
 
-Lower-priority subsystems such as cartridges, save states, and bit-level SIO
+Lower-priority subsystems such as cartridges, portable save states, and bit-level SIO
 should remain separate additions rather than enlarging the core preemptively.
 
 ### Potential simplifications
@@ -147,12 +147,16 @@ Stable undocumented NMOS 6502 opcodes are enabled by default. They can be
 excluded for a strictly documented instruction set with
 `-DA800_UNDOCUMENTED_OPCODES=OFF`.
 
-BASIC, NTSC, and PAL support are also enabled by default. Minimal builds can
+BASIC, NTSC, PAL, and XEX screen-editor initialization are enabled by default.
+Diagnostic save states are disabled by default. Minimal or diagnostic builds can
 use `-DA800_BASIC=OFF`, `-DA800_NTSC=OFF`, or `-DA800_PAL=OFF`; these define
 `NO_BASIC`, `NO_NTSC`, or `NO_PAL` for the core. At least one video standard
 must remain enabled. A no-BASIC build removes `-b`, `--basic`, and
 `--basic-rom`; a single-standard build removes both runtime video-selection
-options because there is no alternative standard to select.
+options because there is no alternative standard to select. Use
+`-DA800_SAVE_STATE=ON` to compile `State.c` and enable F6/F7, `--state`, and
+`--load-state`. Use `-DA800_OPEN_EDITOR=OFF` to omit the pre-XEX `E:` open for
+programs known not to depend on the normal OS editor setup.
 
 ## Run
 
@@ -169,7 +173,7 @@ Provide an exact-size Atari XL OS ROM dump (not included):
 ./build/a800 game.atr
 ./build/a800 program.xex
 ./build/a800 -b --os path/to/ATARIXL.ROM --basic-rom path/to/ATARIBAS.ROM
-./build/a800 --load-state saved.state
+./build/a800 --load-state saved.state # with A800_SAVE_STATE=ON
 ```
 
 When BASIC support is compiled in, it remains disabled without `-b`. XEX
@@ -186,9 +190,9 @@ boot-device loader. BASIC
 code is not executed and `READY` is not displayed while launching a XEX.
 
 Controls: arrows are joystick directions, Left/Right Alt is fire, F2/F3/F4
-are OPTION/SELECT/START, F5 resets, F6 saves a diagnostic snapshot, F7 restores
-it, and F8 is BREAK. The default snapshot is `a800.state`; `--state FILE`
-selects another F6/F7 slot. Normal letter, number,
+are OPTION/SELECT/START, F5 resets, and F8 is BREAK. In a save-state build, F6
+saves a diagnostic snapshot and F7 restores it. The default snapshot is
+`a800.state`; `--state FILE` selects another F6/F7 slot. Normal letter, number,
 punctuation, Return, Space, Backspace, Escape, Tab, Shift, and Control input is
 mapped to the Atari keyboard matrix and POKEY registers.
 
@@ -225,6 +229,7 @@ core build:
 python3 xex2wasc.py game.xex game.wasc "Game name"
 python3 xex2wasc.py --pal game.xex game-pal.wasc "Game name"
 python3 xex2wasc.py -b game.xex game-with-basic.wasc "Game name"
+python3 xex2wasc.py --no-open-editor game.xex game-small.wasc "Game name"
 ```
 
 See [WASMCART.md](WASMCART.md) for prerequisites, assets, and exported devices.
@@ -260,7 +265,8 @@ intended to cover nonblank-but-incorrect output.
 
 ## Diagnostic snapshots
 
-Snapshots are intended to make intermittent emulator bugs reproducible. They
+Save-state support must be enabled with `-DA800_SAVE_STATE=ON`. Snapshots are
+intended to make intermittent emulator bugs reproducible. They
 capture the complete core, mounted disk image, and pending XEX data, but omit
 SDL/WASMCART host state and discard already-buffered audio samples when loaded.
 They include a format version and build-feature checks, but are deliberately
