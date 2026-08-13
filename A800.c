@@ -1,6 +1,7 @@
 /* SDL2 frontend for the compact a800 core. */
 #include "Atari.h"
 #include "Pokey.h"
+#include "State.h"
 #include <SDL.h>
 #include <stdio.h>
 #include <string.h>
@@ -56,7 +57,8 @@ static uint8_t keycode(SDL_Keycode k, SDL_Keymod mod) {
   }
 }
 static void input(Atari *a, const SDL_Event *e, int down, int use_basic,
-                  int *option_boot_frames) {
+                  int *option_boot_frames, const char *state_path,
+                  int *state_loaded) {
   SDL_Keycode k = e->key.keysym.sym;
   uint8_t bit = 0;
   if (k == SDLK_UP)
@@ -107,6 +109,21 @@ static void input(Atari *a, const SDL_Event *e, int down, int use_basic,
     }
     return;
   }
+  if (k == SDLK_F6 && down) {
+    fprintf(stderr, "a800: %s state %s\n",
+            State_Save(a, state_path) ? "cannot save" : "saved", state_path);
+    return;
+  }
+  if (k == SDLK_F7 && down) {
+    if (State_Load(a, state_path))
+      fprintf(stderr, "a800: cannot load state %s\n", state_path);
+    else {
+      fprintf(stderr, "a800: loaded state %s\n", state_path);
+      *state_loaded = 1;
+      *option_boot_frames = 0;
+    }
+    return;
+  }
   if (k == SDLK_F8 && down) {
     a->pokey_irqst &= 0x7f;
     if (a->pokey_irqen & 0x80)
@@ -128,7 +145,8 @@ static void input(Atari *a, const SDL_Event *e, int down, int use_basic,
   }
 }
 int main(int argc, char **argv) {
-  const char *os = "ATARIXL.ROM", *media = NULL, *xex = NULL;
+  const char *os = "ATARIXL.ROM", *media = NULL, *xex = NULL,
+             *state_path = "a800.state", *load_state = NULL;
 #ifndef NO_BASIC
   const char *basic = "ATARIBAS.ROM";
 #endif
@@ -155,6 +173,10 @@ int main(int argc, char **argv) {
 #endif
         if (!strcmp(argv[i], "--os") && i + 1 < argc)
       os = argv[++i];
+    else if (!strcmp(argv[i], "--state") && i + 1 < argc)
+      state_path = argv[++i];
+    else if (!strcmp(argv[i], "--load-state") && i + 1 < argc)
+      state_path = load_state = argv[++i];
     else if (argv[i][0] == '-') {
       fprintf(stderr, "a800: unsupported option: %s\n", argv[i]);
       return 1;
@@ -167,12 +189,22 @@ int main(int argc, char **argv) {
       xex = media;
   }
   Atari a;
+  memset(&a, 0, sizeof(a));
+  int state_loaded = 0;
+  int r = load_state ? State_Load(&a, load_state) : 0;
+  if (load_state && r) {
+    fprintf(stderr, "a800: cannot load state %s\n", load_state);
+    return 1;
+  }
+  state_loaded = load_state != NULL;
+  if (!load_state) {
 #ifdef NO_BASIC
-  int r = Atari_Init(&a, os, NULL);
+    r = Atari_Init(&a, os, NULL);
 #else
-  int r = Atari_Init(&a, os, use_basic ? basic : NULL);
+    r = Atari_Init(&a, os, use_basic ? basic : NULL);
 #endif
-  if (r) {
+  }
+  if (!load_state && r) {
 #ifdef NO_BASIC
     fprintf(stderr, "a800: cannot load %s (expected 16384 bytes)\n", os);
 #else
@@ -181,11 +213,12 @@ int main(int argc, char **argv) {
 #endif
     return 1;
   }
-  Atari_SetVideoStandard(&a, standard);
+  if (!load_state)
+    Atari_SetVideoStandard(&a, standard);
   int option_boot_frames = 0;
-  if (!use_basic)
+  if (!load_state && !use_basic)
     a.console &= (uint8_t)~4, option_boot_frames = 1;
-  if (media && !xex && Atari_LoadDisk(&a, media))
+  if (!load_state && media && !xex && Atari_LoadDisk(&a, media))
     fprintf(stderr, "a800: warning: cannot mount %s\n", media);
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_EVENTS)) {
     fprintf(stderr, "SDL: %s\n", SDL_GetError());
@@ -218,9 +251,23 @@ int main(int argc, char **argv) {
       if (e.type == SDL_QUIT)
         run = 0;
       else if (e.type == SDL_KEYDOWN && !e.key.repeat)
-        input(&a, &e, 1, use_basic, &option_boot_frames);
+        input(&a, &e, 1, use_basic, &option_boot_frames, state_path,
+              &state_loaded);
       else if (e.type == SDL_KEYUP)
-        input(&a, &e, 0, use_basic, &option_boot_frames);
+        input(&a, &e, 0, use_basic, &option_boot_frames, state_path,
+              &state_loaded);
+    }
+    if (state_loaded) {
+      xex = NULL;
+      boot_frames = 0;
+      audio_due = 0;
+      audio_playing = 0;
+      if (dev) {
+        SDL_ClearQueuedAudio(dev);
+        SDL_PauseAudioDevice(dev, 1);
+        Pokey_Audio(&a, NULL, 0, have.freq);
+      }
+      state_loaded = 0;
     }
     Atari_Frame(&a);
     if (option_boot_frames && !--option_boot_frames)

@@ -1,4 +1,5 @@
 #include "Atari.h"
+#include "State.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,7 +44,7 @@ static void usage(const char *name) {
 #endif
           "[--frames N|--seconds N] "
           "[--xex-frame N] [--start-frame N] [--trace-audio] [--output "
-          "frame.ppm] [--os ROM] "
+          "frame.ppm] [--load-state FILE] [--os ROM] "
 #ifndef NO_BASIC
           "[--basic-rom ROM] "
 #endif
@@ -52,7 +53,8 @@ static void usage(const char *name) {
 }
 
 int main(int argc, char **argv) {
-  const char *os = "ATARIXL.ROM", *media = NULL, *output = NULL;
+  const char *os = "ATARIXL.ROM", *media = NULL, *output = NULL,
+             *load_state = NULL;
 #ifndef NO_BASIC
   const char *basic_rom = "ATARIBAS.ROM";
 #endif
@@ -92,6 +94,8 @@ int main(int argc, char **argv) {
       trace_audio = 1;
     else if (!strcmp(argv[i], "--output") && i + 1 < argc)
       output = argv[++i];
+    else if (!strcmp(argv[i], "--load-state") && i + 1 < argc)
+      load_state = argv[++i];
     else if (!strcmp(argv[i], "--os") && i + 1 < argc)
       os = argv[++i];
     else if (argv[i][0] == '-') {
@@ -105,22 +109,30 @@ int main(int argc, char **argv) {
     return 2;
   }
   Atari a;
+  memset(&a, 0, sizeof(a));
+  if (load_state) {
+    if (State_Load(&a, load_state)) {
+      fprintf(stderr, "a800-validate: state load failed: %s\n", load_state);
+      return 2;
+    }
+  } else {
 #ifdef NO_BASIC
-  if (Atari_Init(&a, os, NULL)) {
+    if (Atari_Init(&a, os, NULL)) {
 #else
-  if (Atari_Init(&a, os, basic ? basic_rom : NULL)) {
+    if (Atari_Init(&a, os, basic ? basic_rom : NULL)) {
 #endif
-    fprintf(stderr, "a800-validate: ROM load failed\n");
-    return 2;
+      fprintf(stderr, "a800-validate: ROM load failed\n");
+      return 2;
+    }
+    Atari_SetVideoStandard(&a, standard);
   }
-  Atari_SetVideoStandard(&a, standard);
   if (seconds > 0)
     frames = (int)(seconds * a.frame_rate + .5);
-  int xex = media && extension_is(media, ".xex");
+  int xex = !load_state && media && extension_is(media, ".xex");
   int option_boot_frames = 0;
-  if (!basic)
+  if (!load_state && !basic)
     a.console &= (uint8_t)~4, option_boot_frames = 1;
-  if (media && !xex && Atari_LoadDisk(&a, media)) {
+  if (!load_state && media && !xex && Atari_LoadDisk(&a, media)) {
     fprintf(stderr, "a800-validate: media load failed: %s\n", media);
     Atari_Destroy(&a);
     return 2;

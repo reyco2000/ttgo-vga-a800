@@ -5,7 +5,10 @@
 #include "Gtia.h"
 #include "Pia.h"
 #include "Pokey.h"
+#include "State.h"
 #include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 int main(void) {
@@ -492,5 +495,28 @@ int main(void) {
   Atari_Frame(&timed);
   assert(timed.cycles == (uint64_t)timed.frame_lines * 114u);
   assert(timed.cpu_cycle_debt <= 2);
+  timed.ram[0x1234] = 0x56;
+  timed.audio_len = 7;
+  timed.disk_size = 3;
+  timed.disk = (uint8_t *)malloc(timed.disk_size);
+  timed.xex_size = 2;
+  timed.xex_data = (uint8_t *)malloc(timed.xex_size);
+  assert(timed.disk && timed.xex_data);
+  memcpy(timed.disk, "ATR", timed.disk_size);
+  timed.xex_data[0] = 0xff;
+  timed.xex_data[1] = 0xff;
+  assert(State_Save(&timed, "core_test.state") == 0);
+  timed.ram[0x1234] = 0;
+  timed.disk[0] = 0;
+  timed.xex_data[0] = 0;
+  assert(State_Load(&timed, "core_test.state") == 0);
+  assert(timed.ram[0x1234] == 0x56);
+  assert(timed.palette == Gtia_Palette(timed.video_standard));
+  assert(timed.audio_len == 0);
+  assert(timed.disk_size == 3 && !memcmp(timed.disk, "ATR", 3));
+  assert(timed.xex_size == 2 && timed.xex_data[0] == 0xff &&
+         timed.xex_data[1] == 0xff);
+  assert(remove("core_test.state") == 0);
+  Atari_Destroy(&timed);
   return 0;
 }

@@ -169,6 +169,7 @@ Provide an exact-size Atari XL OS ROM dump (not included):
 ./build/a800 game.atr
 ./build/a800 program.xex
 ./build/a800 -b --os path/to/ATARIXL.ROM --basic-rom path/to/ATARIBAS.ROM
+./build/a800 --load-state saved.state
 ```
 
 When BASIC support is compiled in, it remains disabled without `-b`. XEX
@@ -185,7 +186,9 @@ boot-device loader. BASIC
 code is not executed and `READY` is not displayed while launching a XEX.
 
 Controls: arrows are joystick directions, Left/Right Alt is fire, F2/F3/F4
-are OPTION/SELECT/START, F5 resets, and F8 is BREAK. Normal letter, number,
+are OPTION/SELECT/START, F5 resets, F6 saves a diagnostic snapshot, F7 restores
+it, and F8 is BREAK. The default snapshot is `a800.state`; `--state FILE`
+selects another F6/F7 slot. Normal letter, number,
 punctuation, Return, Space, Backspace, Escape, Tab, Shift, and Control input is
 mapped to the Atari keyboard matrix and POKEY registers.
 
@@ -201,6 +204,7 @@ mapped to the Atari keyboard matrix and POKEY registers.
 | `Pia.c` | joystick and XL memory-control ports |
 | `AtariIo.c` | ROM, ATR/SIOV, and segmented XEX loading |
 | `Atari.c` | machine wiring and memory map |
+| `State.c` | optional same-build diagnostic snapshots |
 | `A800.c` | SDL2 application |
 | `wasmcart_main.c` | optional WASMCART framebuffer, audio, and input adapter |
 
@@ -240,6 +244,7 @@ binary portable pixmap (PPM):
 ./build/a800-validate --seconds 8 --start-frame 200 game.xex
 ./build/a800-validate --frames 300 --output frame.ppm disk.atr
 ./build/a800-validate --pal --frames 180
+./build/a800-validate --load-state saved.state --frames 120
 ```
 
 Use `--os` and `--basic-rom` to select ROM files. The utility returns failure
@@ -252,6 +257,16 @@ handoff; `--start-frame N` presses START for one frame; and `--trace-audio`
 reports POKEY register changes. The blank-frame result is a smoke test, not a
 complete visual regression check; the regression-corpus priority above is
 intended to cover nonblank-but-incorrect output.
+
+## Diagnostic snapshots
+
+Snapshots are intended to make intermittent emulator bugs reproducible. They
+capture the complete core, mounted disk image, and pending XEX data, but omit
+SDL/WASMCART host state and discard already-buffered audio samples when loaded.
+They include a format version and build-feature checks, but are deliberately
+same-build diagnostic files rather than a portable, compatibility-stable save
+format. Use F6/F7 in `a800`, or load a captured state headlessly with
+`a800-validate --load-state FILE`.
 
 ## Provenance
 
