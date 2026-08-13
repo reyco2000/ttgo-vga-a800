@@ -1,4 +1,6 @@
 #include "AtariIo.h"
+#include "6502.h"
+#include "Pokey.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -98,9 +100,38 @@ int Atari_LoadDisk(Atari *a, const char *path) {
 int Atari_Sector(Atari *a, unsigned s, uint8_t *d, int w) {
   return AtariIo_Sector(a, s, d, w);
 }
+static void open_editor(Atari *a) {
+  /* A normal XL boot opens E: before trying the boot device. Direct XEX
+   * loading bypasses that step, but programs may still use its OS state. */
+  if (a->ram[0x340] != 0xff)
+    return;
+  a->ram[0x700] = 'E';
+  a->ram[0x701] = ':';
+  a->ram[0x702] = 0x9b;
+  memset(a->ram + 0x340, 0, 16);
+  a->ram[0x340] = 0xff;
+  a->ram[0x342] = 3; /* CIO OPEN */
+  a->ram[0x344] = 0;
+  a->ram[0x345] = 7;
+  a->ram[0x34a] = 0x0c;
+  a->x = 0;
+  a->s = 0xff;
+  a->p = 0x24;
+  a->irq = a->nmi = 0;
+  a->ram[0x1ff] = 0xd5;
+  a->ram[0x1fe] = 0xfd;
+  a->s = 0xfd;
+  a->pc = 0xe456;
+  for (int limit = 200000; a->pc != 0xd5fe && limit > 0; limit--) {
+    int cycles = Cpu_Step(a);
+    Pokey_Advance(a, cycles);
+    a->cycles += (unsigned)cycles;
+  }
+}
 int Atari_LoadExecutableData(Atari *a, const uint8_t *data, size_t size) {
   if (!data || size < 6)
     return -1;
+  open_editor(a);
   free(a->xex_data);
   a->xex_data = (uint8_t *)malloc(size);
   if (!a->xex_data)
