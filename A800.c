@@ -238,7 +238,7 @@ int main(int argc, char **argv) {
       a.video_standard == A800_PAL ? "a800 - PAL" : "a800 - NTSC",
       SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 768, a.frame_lines * 2,
       SDL_WINDOW_RESIZABLE);
-  SDL_Renderer *ren = SDL_CreateRenderer(w, -1, SDL_RENDERER_ACCELERATED);
+  SDL_Renderer *ren = SDL_CreateRenderer(w, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
   SDL_Texture *tex =
       SDL_CreateTexture(ren, SDL_PIXELFORMAT_ARGB8888,
                         SDL_TEXTUREACCESS_STREAMING, A800_WIDTH, a.frame_lines);
