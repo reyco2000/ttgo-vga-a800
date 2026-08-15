@@ -13,7 +13,40 @@
 #include <stdlib.h>
 #include <string.h>
 
+static void test_rom_xex(void) {
+  static const uint8_t header[] = {0xff, 0xff, 0x00, 0x00, 0x0f, 0x00, 'A', '8',
+                                   'O',  'S',  'X',  'E',  'X',  0,    1,   0,
+                                   0,    0,    0,    0,    0,    0};
+  const struct {
+    uint8_t machine;
+    uint16_t address;
+  } cases[] = {{A800_MACHINE_800, 0xd800},
+               {A800_MACHINE_XL, 0x5000},
+               {A800_MACHINE_5200, 0xf800}};
+  for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+    FILE *file = fopen("core_test_os.xex", "wb");
+    assert(file);
+    uint8_t image[sizeof(header)];
+    memcpy(image, header, sizeof(image));
+    image[15] = cases[i].machine;
+    assert(fwrite(image, 1, sizeof(image), file) == sizeof(image));
+    uint8_t segment[5] = {
+        (uint8_t)cases[i].address, (uint8_t)(cases[i].address >> 8),
+        (uint8_t)cases[i].address, (uint8_t)(cases[i].address >> 8), 0x5a};
+    assert(fwrite(segment, 1, sizeof(segment), file) == sizeof(segment));
+    assert(!fclose(file));
+    Atari a = {0};
+    assert(!AtariIo_LoadOs(&a, "core_test_os.xex"));
+    assert(a.machine_type == cases[i].machine);
+    if (a.machine_type == A800_MACHINE_XL)
+      a.pia_ddr[1] = 0xff, a.pia[1] = 0x7f;
+    assert(Atari_Read(&a, cases[i].address) == 0x5a);
+  }
+  assert(!remove("core_test_os.xex"));
+}
+
 int main(void) {
+  test_rom_xex();
   Atari a;
   memset(&a, 0, sizeof(a));
   a.s = 0xfd;
@@ -86,6 +119,8 @@ int main(void) {
 #endif
   a.pia[1] = 1;
   a.pia_ddr[1] = 1;
+  a.machine_type = A800_MACHINE_XL;
+  a.os_pages[31] = 0x80;
   a.os[0x3ffc] = 0x34;
   a.os[0x3ffd] = 0x12;
   Cpu_Reset(&a);

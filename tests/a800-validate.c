@@ -141,7 +141,7 @@ int main(int argc, char **argv) {
     frames = (int)(seconds * a.frame_rate + .5);
   int xex = !load_state && media && extension_is(media, ".xex");
   int option_boot_frames = 0;
-  if (!load_state && !basic)
+  if (!load_state && a.machine_type == A800_MACHINE_XL && !basic)
     a.console &= (uint8_t)~4, option_boot_frames = 1;
   if (!load_state && media && !xex && Atari_LoadDisk(&a, media)) {
     fprintf(stderr, "a800-validate: media load failed: %s\n", media);
@@ -179,9 +179,9 @@ int main(int argc, char **argv) {
   for (int i = 0; i < A800_WIDTH * a.frame_lines; i++)
     if (a.pixels[i] != first)
       different++;
-  printf("standard=%s frames=%d cycles=%llu\n",
-         a.video_standard == A800_PAL ? "PAL" : "NTSC", frames,
-         (unsigned long long)a.cycles);
+  printf("machine=%s standard=%s frames=%d cycles=%llu\n",
+         Atari_MachineName(&a), a.video_standard == A800_PAL ? "PAL" : "NTSC",
+         frames, (unsigned long long)a.cycles);
   printf("cpu pc=%04x a=%02x x=%02x y=%02x s=%02x p=%02x irq=%d nmi=%d\n", a.pc,
          a.a, a.x, a.y, a.s, a.p, a.irq, a.nmi);
 #ifdef NO_BASIC

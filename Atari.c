@@ -22,11 +22,15 @@ int Atari_Init(Atari *a, const char *os, const char *basic) {
 #endif
   Pia_Reset(a);
   a->pokey_irqst = a->pokey_skstat = 0xff;
-  if (AtariIo_LoadFile(os, a->os, sizeof(a->os)))
+  if (AtariIo_LoadOs(a, os))
     return -1;
 #ifndef NO_BASIC
-  if (basic && AtariIo_LoadFile(basic, a->basic, sizeof(a->basic)))
-    return -2;
+  if (basic) {
+    if (a->machine_type != A800_MACHINE_XL)
+      return -3;
+    if (AtariIo_LoadFile(basic, a->basic, sizeof(a->basic)))
+      return -2;
+  }
 #else
   (void)basic;
 #endif
@@ -50,6 +54,13 @@ void Atari_SetVideoStandard(Atari *a, AtariVideoStandard standard) {
     a->cpu_hz = 1789772u;
     a->frame_rate = 59.9227434;
   }
+}
+const char *Atari_MachineName(const Atari *a) {
+  if (a->machine_type == A800_MACHINE_800)
+    return "400/800";
+  if (a->machine_type == A800_MACHINE_5200)
+    return "5200";
+  return "XL/XE";
 }
 void Atari_Reset(Atari *a) {
   memset(a->antic, 0, sizeof(a->antic));
@@ -76,7 +87,14 @@ void Atari_Reset(Atari *a) {
 }
 uint8_t Atari_Read(Atari *a, uint16_t p) {
   uint8_t portb = Atari_PortB(a);
-  if (p >= 0xd000 && p < 0xd800) {
+  if (a->machine_type == A800_MACHINE_5200) {
+    if (p >= 0xc000 && p < 0xd000)
+      return Gtia_Read(a, p);
+    if (p >= 0xd400 && p < 0xd500)
+      return Antic_Read(a, p);
+    if (p >= 0xe800 && p < 0xf000)
+      return Pokey_Read(a, p);
+  } else if (p >= 0xd000 && p < 0xd800) {
     switch ((p >> 8) & 7) {
     case 0:
       return Gtia_Read(a, p);
@@ -90,21 +108,39 @@ uint8_t Atari_Read(Atari *a, uint16_t p) {
       return 0xff;
     }
   }
-  if (p >= 0xc000 && (portb & 1))
+  if (p >= 0xc000 && (a->os_pages[p >> 11] & (1u << ((p >> 8) & 7))) &&
+      (a->machine_type != A800_MACHINE_XL || (portb & 1)))
     return a->os[p - 0xc000];
 #ifndef NO_BASIC
-  if (p >= 0xa000 && p < 0xc000 && !(portb & 2))
+  if (a->machine_type == A800_MACHINE_XL && p >= 0xa000 && p < 0xc000 &&
+      !(portb & 2))
     return a->basic[p - 0xa000];
 #else
-  if (p >= 0xa000 && p < 0xc000 && !(portb & 2))
+  if (a->machine_type == A800_MACHINE_XL && p >= 0xa000 && p < 0xc000 &&
+      !(portb & 2))
     return 0;
 #endif
-  if (p >= 0x5000 && p < 0x5800 && (portb & 1) && !(portb & 0x80))
+  if (a->machine_type == A800_MACHINE_XL && p >= 0x5000 && p < 0x5800 &&
+      (a->os_pages[p >> 11] & (1u << ((p >> 8) & 7))) && (portb & 1) &&
+      !(portb & 0x80))
     return a->os[0x1000 + p - 0x5000];
   return a->ram[p];
 }
 void Atari_Write(Atari *a, uint16_t p, uint8_t v) {
-  if (p >= 0xd000 && p < 0xd800) {
+  if (a->machine_type == A800_MACHINE_5200) {
+    if (p >= 0xc000 && p < 0xd000) {
+      Gtia_Write(a, p, v);
+      return;
+    }
+    if (p >= 0xd400 && p < 0xd500) {
+      Antic_Write(a, p, v);
+      return;
+    }
+    if (p >= 0xe800 && p < 0xf000) {
+      Pokey_Write(a, p, v);
+      return;
+    }
+  } else if (p >= 0xd000 && p < 0xd800) {
     switch ((p >> 8) & 7) {
     case 0:
       Gtia_Write(a, p, v);
@@ -122,9 +158,15 @@ void Atari_Write(Atari *a, uint16_t p, uint8_t v) {
     return;
   }
   uint8_t pb = Atari_PortB(a);
-  if (p >= 0xc000 && (pb & 1))
+  if (p >= 0xc000 && (a->os_pages[p >> 11] & (1u << ((p >> 8) & 7))) &&
+      (a->machine_type != A800_MACHINE_XL || (pb & 1)))
     return;
-  if (p >= 0xa000 && p < 0xc000 && !(pb & 2))
+  if (a->machine_type == A800_MACHINE_XL && p >= 0xa000 && p < 0xc000 &&
+      !(pb & 2))
+    return;
+  if (a->machine_type == A800_MACHINE_XL && p >= 0x5000 && p < 0x5800 &&
+      (a->os_pages[p >> 11] & (1u << ((p >> 8) & 7))) && (pb & 1) &&
+      !(pb & 0x80))
     return;
   a->ram[p] = v;
 }

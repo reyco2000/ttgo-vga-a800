@@ -105,7 +105,7 @@ static void input(Atari *a, const SDL_Event *e, int down, int use_basic,
   }
   if (k == SDLK_F5 && down) {
     Atari_Reset(a);
-    if (!use_basic) {
+    if (a->machine_type == A800_MACHINE_XL && !use_basic) {
       a->console &= (uint8_t)~4;
       *option_boot_frames = 1;
     }
@@ -216,17 +216,17 @@ int main(int argc, char **argv) {
   }
   if (!load_state && r) {
 #ifdef NO_BASIC
-    fprintf(stderr, "a800: cannot load %s (expected 16384 bytes)\n", os);
+    fprintf(stderr, "a800: cannot load OS image %s\n", os);
 #else
-    fprintf(stderr, "a800: cannot load %s (%s)\n", r == -1 ? os : basic,
-            r == -1 ? "expected 16384 bytes" : "expected 8192 bytes");
+    fprintf(stderr, "a800: cannot load %s%s\n", r == -1 ? os : basic,
+            r == -3 ? " (BASIC requires an XL OS)" : "");
 #endif
     return 1;
   }
   if (!load_state)
     Atari_SetVideoStandard(&a, standard);
   int option_boot_frames = 0;
-  if (!load_state && !use_basic)
+  if (!load_state && a.machine_type == A800_MACHINE_XL && !use_basic)
     a.console &= (uint8_t)~4, option_boot_frames = 1;
   if (!load_state && media && !xex && Atari_LoadDisk(&a, media))
     fprintf(stderr, "a800: warning: cannot mount %s\n", media);
@@ -234,10 +234,12 @@ int main(int argc, char **argv) {
     fprintf(stderr, "SDL: %s\n", SDL_GetError());
     return 1;
   }
-  SDL_Window *w = SDL_CreateWindow(
-      a.video_standard == A800_PAL ? "a800 - PAL" : "a800 - NTSC",
-      SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 768, a.frame_lines * 2,
-      SDL_WINDOW_RESIZABLE);
+  char title[48];
+  snprintf(title, sizeof(title), "a800 - %s - %s", Atari_MachineName(&a),
+           a.video_standard == A800_PAL ? "PAL" : "NTSC");
+  SDL_Window *w =
+      SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                       768, a.frame_lines * 2, SDL_WINDOW_RESIZABLE);
   SDL_Renderer *ren = SDL_CreateRenderer(w, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
   SDL_Texture *tex =
       SDL_CreateTexture(ren, SDL_PIXELFORMAT_ARGB8888,

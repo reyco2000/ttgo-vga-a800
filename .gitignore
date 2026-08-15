@@ -7,4 +7,8 @@
 cart.wasm
 ATARIBAS.ROM
 ATARIXL.ROM
+ATARIOSA.ROM
+ATARIOSB.ROM
+5200.ROM
 *.state
+__pycache__/

@@ -110,7 +110,8 @@ static void input(void) {
     if (hid == WC_KEY_F5 && now) {
       int rate = machine.audio_rate;
       Atari_Reset(&machine);
-      option_boot_frames = !basic_available;
+      option_boot_frames =
+          machine.machine_type == A800_MACHINE_XL && !basic_available;
       Pokey_Audio(&machine, NULL, 0, rate);
       continue;
     }
@@ -143,9 +144,10 @@ WC_EXPORT_INIT void wc_init(void) {
   const char *basic = "ATARIBAS.ROM";
 #endif
   basic_available = basic != NULL;
-  option_boot_frames = !basic_available;
-  if (Atari_Init(&machine, "ATARIXL.ROM", basic))
+  if (Atari_Init(&machine, "OS.XEX", basic))
     return;
+  option_boot_frames =
+      machine.machine_type == A800_MACHINE_XL && !basic_available;
 #ifdef NO_NTSC
   Atari_SetVideoStandard(&machine, A800_PAL);
 #else

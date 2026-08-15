@@ -21,6 +21,111 @@ int AtariIo_LoadFile(const char *path, uint8_t *dst, size_t expected) {
   return n == expected && extra == EOF ? 0 : -1;
 #endif
 }
+static uint8_t *load_alloc(const char *path, size_t *size) {
+#ifdef WASMCART
+  extern int wc_asset_size(const char *, unsigned)
+      __attribute__((import_module("env"), import_name("wc_asset_size")));
+  int n = wc_asset_size(path, (unsigned)strlen(path));
+  if (n <= 0)
+    return NULL;
+  uint8_t *data = (uint8_t *)malloc((size_t)n);
+  if (!data || AtariIo_LoadFile(path, data, (size_t)n)) {
+    free(data);
+    return NULL;
+  }
+  *size = (size_t)n;
+  return data;
+#else
+  FILE *file = fopen(path, "rb");
+  long n;
+  if (!file || fseek(file, 0, SEEK_END) || (n = ftell(file)) <= 0 ||
+      fseek(file, 0, SEEK_SET)) {
+    if (file)
+      fclose(file);
+    return NULL;
+  }
+  uint8_t *data = (uint8_t *)malloc((size_t)n);
+  if (!data || fread(data, 1, (size_t)n, file) != (size_t)n) {
+    free(data);
+    fclose(file);
+    return NULL;
+  }
+  fclose(file);
+  *size = (size_t)n;
+  return data;
+#endif
+}
+static void os_page(Atari *a, unsigned address) {
+  a->os_pages[address >> 11] |= (uint8_t)(1u << ((address >> 8) & 7));
+}
+static int load_os_xex(Atari *a, const uint8_t *data, size_t size) {
+  if (size < 22 || data[0] != 0xff || data[1] != 0xff || data[2] || data[3] ||
+      data[4] != 15 || data[5] || memcmp(data + 6, "A8OSXEX\0", 8) ||
+      data[14] != 1 || data[15] < A800_MACHINE_800 ||
+      data[15] > A800_MACHINE_5200)
+    return -1;
+  a->machine_type = (AtariMachineType)data[15];
+  size_t pos = 22;
+  while (pos < size) {
+    while (pos + 1 < size && data[pos] == 0xff && data[pos + 1] == 0xff)
+      pos += 2;
+    if (pos + 4 > size)
+      return -1;
+    unsigned start = data[pos] | data[pos + 1] << 8,
+             end = data[pos + 2] | data[pos + 3] << 8;
+    pos += 4;
+    size_t count = end >= start ? end - start + 1u : 0;
+    int self_test =
+        a->machine_type == A800_MACHINE_XL && start >= 0x5000 && end < 0x5800;
+    int main_rom = start >= 0xc000 &&
+                   (a->machine_type == A800_MACHINE_XL || start >= 0xd800) &&
+                   (a->machine_type != A800_MACHINE_5200 || start >= 0xf800);
+    if (!count || count > size - pos || (!self_test && !main_rom))
+      return -1;
+    unsigned offset = self_test ? 0x1000 + start - 0x5000 : start - 0xc000;
+    if (offset + count > sizeof(a->os))
+      return -1;
+    memcpy(a->os + offset, data + pos, count);
+    for (unsigned page = start >> 8; page <= end >> 8; page++)
+      os_page(a, page << 8);
+    pos += count;
+  }
+  return 0;
+}
+int AtariIo_LoadOs(Atari *a, const char *path) {
+  size_t size = 0;
+  uint8_t *data = load_alloc(path, &size);
+  if (!data)
+    return -1;
+  memset(a->os, 0xff, sizeof(a->os));
+  memset(a->os_pages, 0, sizeof(a->os_pages));
+  int failed = 0;
+  if (size >= 2 && data[0] == 0xff && data[1] == 0xff)
+    failed = load_os_xex(a, data, size);
+  else if (size == 0x4000) {
+    a->machine_type = A800_MACHINE_XL;
+    memcpy(a->os, data, size);
+    for (unsigned page = 0xc0; page <= 0xcf; page++)
+      os_page(a, page << 8);
+    for (unsigned page = 0x50; page <= 0x57; page++)
+      os_page(a, page << 8);
+    for (unsigned page = 0xd8; page <= 0xff; page++)
+      os_page(a, page << 8);
+  } else if (size == 0x2800) {
+    a->machine_type = A800_MACHINE_800;
+    memcpy(a->os + 0x1800, data, size);
+    for (unsigned page = 0xd8; page <= 0xff; page++)
+      os_page(a, page << 8);
+  } else if (size == 0x800) {
+    a->machine_type = A800_MACHINE_5200;
+    memcpy(a->os + 0x3800, data, size);
+    for (unsigned page = 0xf8; page <= 0xff; page++)
+      os_page(a, page << 8);
+  } else
+    failed = -1;
+  free(data);
+  return failed;
+}
 int AtariIo_LoadDisk(Atari *a, const char *path) {
   FILE *f = fopen(path, "rb");
   long n;

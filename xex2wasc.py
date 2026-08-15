@@ -32,6 +32,11 @@ def main():
         action="store_true",
         help="omit OS screen-editor initialization before XEX startup",
     )
+    parser.add_argument(
+        "--os",
+        default=None,
+        help="raw ROM or ROM-XEX image (default: ATARIXL.ROM)",
+    )
     parser.add_argument("input_xex")
     parser.add_argument("output_wasc")
     parser.add_argument("game_name", nargs="?")
@@ -43,10 +48,14 @@ def main():
     if not os.path.isfile(input_xex):
         print(f"Error: input XEX not found: {input_xex}")
         return 1
-    names = ["ATARIXL.ROM"]
+    os_image = (
+        os.path.abspath(args.os)
+        if args.os
+        else os.path.join(source_dir, "ATARIXL.ROM")
+    )
+    assets = {"OS.XEX": os_image}
     if args.basic:
-        names.append("ATARIBAS.ROM")
-    assets = {name: os.path.join(source_dir, name) for name in names}
+        assets["ATARIBAS.ROM"] = os.path.join(source_dir, "ATARIBAS.ROM")
     missing = [path for path in assets.values() if not os.path.isfile(path)]
     if missing:
         print("Error: required ROM file not found: " + ", ".join(missing))
@@ -77,7 +86,7 @@ def main():
     try:
         print("Compiling a800 wasm cartridge...")
         subprocess.run(command, cwd=source_dir, check=True)
-        shutil.copy(assets["ATARIXL.ROM"], os.path.join(temporary, "ATARIXL.ROM"))
+        shutil.copy(assets["OS.XEX"], os.path.join(temporary, "OS.XEX"))
         if args.basic:
             shutil.copy(assets["ATARIBAS.ROM"], os.path.join(temporary, "ATARIBAS.ROM"))
         shutil.copy(input_xex, os.path.join(temporary, "game.xex"))

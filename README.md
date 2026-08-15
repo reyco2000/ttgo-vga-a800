@@ -1,6 +1,7 @@
 # a800
 
-`a800` is a small, readable Atari 800 XL (NTSC or PAL) emulator in C. Its flat
+`a800` is a small, readable Atari 400/800, XL/XE, and partial 5200 (NTSC or PAL)
+emulator in C. Its flat
 source layout follows A8E (`6502.c`, `Antic.c`, `Gtia.c`, `Pokey.c`, `Pia.c`,
 and `AtariIo.c`), while the implementation is new code informed by Atari800's
 hardware organization and the Atari register model.
@@ -13,7 +14,8 @@ useful as a compact core to read and extend.
 - NMOS 6502 official instruction set, decimal mode, interrupts, indirect JMP
   page-wrap behavior, stable undocumented read/modify/write and load/store
   families, and undocumented NOP encodings
-- 64 KiB XL address space, OS/BASIC/self-test overlays, and PORTB banking
+- 400/800, XL/XE, and 5200 hardware/OS address maps; XL OS/BASIC/self-test
+  overlays and PORTB banking
 - selectable NTSC (default: 262 lines, 1.790 MHz, 59.92 Hz) or PAL (312
   lines, 1.773 MHz, 49.86 Hz) timing, WSYNC, VCOUNT, GTIA PAL identification,
   VBI NMI, practical display-list/playfield/character/PMG DMA stealing, and
@@ -38,6 +40,8 @@ useful as a compact core to read and extend.
   disk status and reads
 - segmented XEX loading with ordered INITAD execution and RUNAD handoff after
   OS startup
+- raw or sparse ROM-XEX loading for OSA, OSB, XL/XE, and the 5200 OS/hardware
+  memory map
 - SDL2 video, audio, keyboard, joystick-key, and console-key frontend
 - optional WASMCART packaging of a XEX with framebuffer, audio, joystick,
   console-button, and keyboard adapters
@@ -160,9 +164,12 @@ programs known not to depend on the normal OS editor setup.
 
 ## Run
 
-Provide an exact-size Atari XL OS ROM dump (not included):
+Provide a supported raw OS ROM dump or a sparse image made by `rom2xex.py`
+(ROMs are not included):
 
-- `ATARIXL.ROM` — 16 KiB
+- `ATARIOSA.ROM` / `ATARIOSB.ROM` — 10 KiB 400/800 OS
+- `ATARIXL.ROM` — 16 KiB XL/XE OS
+- `5200.ROM` — 2 KiB 5200 OS
 - `ATARIBAS.ROM` — optional 8 KiB BASIC ROM, loaded only with `-b`
 
 ```sh
@@ -174,6 +181,8 @@ Provide an exact-size Atari XL OS ROM dump (not included):
 ./build/a800 program.xex
 ./build/a800 -b --os path/to/ATARIXL.ROM --basic-rom path/to/ATARIBAS.ROM
 ./build/a800 --load-state saved.state # with A800_SAVE_STATE=ON
+./build/a800 --os OSA.XEX
+./build/a800 --os 5200-OS.XEX
 ```
 
 When BASIC support is compiled in, it remains disabled without `-b`. XEX
@@ -188,6 +197,9 @@ During that launch window, a warm start with a RAM `DOSINI` hook transfers to
 the hook directly; this is a compact substitute for Atari800's virtual
 boot-device loader. BASIC
 code is not executed and `READY` is not displayed while launching a XEX.
+Atari BASIC is available only with the XL/XE machine profile. See
+[ROM2XEX.md](ROM2XEX.md) for the sparse ROM format, safe omission flags, and
+the current 5200 scope.
 
 Controls: arrows are joystick directions, Left/Right Alt is fire, F2/F3/F4
 are OPTION/SELECT/START, F5 resets, and F8 is BREAK. In a save-state build, F6
@@ -211,6 +223,7 @@ mapped to the Atari keyboard matrix and POKEY registers.
 | `State.c` | optional same-build diagnostic snapshots |
 | `A800.c` | SDL2 application |
 | `wasmcart_main.c` | optional WASMCART framebuffer, audio, and input adapter |
+| `rom2xex.py` | OSA/OSB/XL/5200 raw-ROM to sparse ROM-XEX converter |
 
 The hardware-named files are intentionally retained even when small. Merging
 `Gtia.c` into `Antic.c`, or folding `Pia.c`/`Pokey.c` into `Atari.c`, would mix
@@ -230,6 +243,7 @@ python3 xex2wasc.py game.xex game.wasc "Game name"
 python3 xex2wasc.py --pal game.xex game-pal.wasc "Game name"
 python3 xex2wasc.py -b game.xex game-with-basic.wasc "Game name"
 python3 xex2wasc.py --no-open-editor game.xex game-small.wasc "Game name"
+python3 xex2wasc.py --os OS.XEX game.xex game-romxex.wasc "Game name"
 ```
 
 See [WASMCART.md](WASMCART.md) for prerequisites, assets, and exported devices.
