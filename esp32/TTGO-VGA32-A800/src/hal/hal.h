@@ -23,5 +23,6 @@ int Keyboard_Poll(Atari *a);
 /* microSD mounted at /sd for the core's stdio file loading. */
 bool Storage_Init(void);
 bool Storage_ReadAutorun(char *path, int size);
+void Storage_End(void);
 
 #endif

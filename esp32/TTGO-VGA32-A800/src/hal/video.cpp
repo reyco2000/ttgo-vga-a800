@@ -3,6 +3,9 @@
 #include "fabgl.h"
 #include "hal.h"
 #include "../../config.h"
+extern "C" {
+#include "../core/Antic.h"
+}
 
 /* 320x240 double-scan timing (FabGL QVGA_320x240_60Hz) widened to 336
  * active pixels: same 31.5 kHz line rate and 60 Hz frame rate. */
@@ -27,6 +30,49 @@ static void IRAM_ATTR line_sink(void *context, int y, const uint8_t *line) {
              (uint32_t)lut[src[0]] << 16 | (uint32_t)lut[src[1]] << 24;
 }
 
+#if DRAW_ON_CORE1
+/* Lines without player/missile graphics are drawn on core 1 while core 0
+ * emulates on: core 0 queues each prepared line, the task below draws it
+ * and stores it in the framebuffer. One producer, one consumer; the queue
+ * bounds how far drawing lags, well under a frame, so a row is never
+ * overwritten by an older line. */
+enum { QUEUE_LINES = 64 };
+static AnticLine *queue; /* from the heap, after the framebuffer */
+static volatile uint32_t queued, drawn;
+static volatile bool drawer_idle;
+static TaskHandle_t drawer;
+
+static void IRAM_ATTR defer_line(void *context, const AnticLine *line) {
+  (void)context;
+  while (queued - drawn >= QUEUE_LINES)
+    ; /* core 1 is a full queue behind: wait for a slot */
+  queue[queued % QUEUE_LINES] = *line;
+  __sync_synchronize();
+  queued = queued + 1;
+  if (drawer_idle)
+    xTaskNotifyGive(drawer);
+}
+
+static void draw_task(void *context) {
+  uint8_t pixels[A800_WIDTH];
+  for (;;) {
+    if (drawn == queued) {
+      drawer_idle = true;
+      __sync_synchronize();
+      if (drawn == queued)
+        ulTaskNotifyTake(pdTRUE, 1);
+      drawer_idle = false;
+      continue;
+    }
+    const AnticLine *line = &queue[drawn % QUEUE_LINES];
+    Antic_DrawLine(line, pixels, NULL, NULL);
+    line_sink(context, line->y, pixels);
+    __sync_synchronize();
+    drawn = drawn + 1;
+  }
+}
+#endif
+
 static uint8_t channel(uint32_t value) { return (uint8_t)((value * 3 + 127) / 255); }
 
 bool Video_Init(Atari *a) {
@@ -36,8 +82,12 @@ bool Video_Init(Atari *a) {
             (gpio_num_t)PIN_VGA_HSYNC, (gpio_num_t)PIN_VGA_VSYNC);
   vga.setResolution(VGA_336x240_60HzD);
   if (vga.getViewPortWidth() != VIDEO_WIDTH ||
-      vga.getViewPortHeight() != VIDEO_HEIGHT)
+      vga.getViewPortHeight() != VIDEO_HEIGHT) {
+    Serial.printf("a800: VGA viewport %dx%d, largest block %u\n",
+                  vga.getViewPortWidth(), vga.getViewPortHeight(),
+                  (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DMA));
     return false;
+  }
   for (int i = 0; i < 256; i++) {
     uint32_t c = a->palette[i];
     lut[i] = vga.createRawPixel(fabgl::RGB222(
@@ -53,5 +103,16 @@ bool Video_Init(Atari *a) {
   delay(TEST_PATTERN_MS);
   a->line_sink_context = a;
   a->line_sink = line_sink;
+#if DRAW_ON_CORE1
+  queue = (AnticLine *)heap_caps_malloc(QUEUE_LINES * sizeof(AnticLine),
+                                        MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  if (!queue ||
+      xTaskCreatePinnedToCore(draw_task, "draw", 4096, a, 1, &drawer, 1) !=
+          pdPASS) {
+    Serial.println("a800: no memory for the core 1 drawer");
+    return false;
+  }
+  a->line_defer = defer_line;
+#endif
   return true;
 }

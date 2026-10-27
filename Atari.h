@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 typedef struct Atari Atari;
+typedef struct AnticLine AnticLine;
 
 enum { A800_WIDTH = 384, A800_MAX_HEIGHT = 312, A800_XEX_BOOT_FRAMES = 85 };
 /* A800_LINE_BUFFER keeps only the scanline being drawn; frontends receive
@@ -59,6 +60,10 @@ struct Atari {
   uint8_t line_pmg[A800_PIXEL_ROWS][5], pm_latch[5];
   uint16_t collision_map[A800_WIDTH * A800_PIXEL_ROWS];
   void (*line_sink)(void *context, int y, const uint8_t *line);
+  /* Optional: lines without player/missile graphics go here instead of
+   * being drawn, for the frontend to draw with Antic_DrawLine (possibly on
+   * another core). Lines with them are still drawn and sent to line_sink. */
+  void (*line_defer)(void *context, const AnticLine *line);
   void *line_sink_context;
   uint16_t display_list, screen_memory;
   uint8_t display_mode, display_row, display_rows, display_width,

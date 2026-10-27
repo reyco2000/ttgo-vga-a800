@@ -1,3 +1,4 @@
+#include "Antic.h"
 #include "Atari.h"
 #include "Pokey.h"
 #ifndef NO_SAVE_STATE
@@ -38,6 +39,19 @@ static const uint8_t *frame_of(const Atari *a) {
   return a->pixels;
 #endif
 }
+/* --defer: draw eligible lines the way a second core would, from the
+ * prepared line alone. */
+static void defer_line(void *context, const AnticLine *line) {
+  Atari *a = (Atari *)context;
+  uint8_t pixels[A800_WIDTH];
+  Antic_DrawLine(line, pixels, NULL, NULL);
+#ifdef A800_LINE_BUFFER
+  memcpy(frame_pixels + (size_t)line->y * A800_WIDTH, pixels, A800_WIDTH);
+#else
+  memcpy(a->pixels + (size_t)line->y * A800_WIDTH, pixels, A800_WIDTH);
+#endif
+  (void)a;
+}
 static uint64_t fnv1a(uint64_t hash, const void *data, size_t size) {
   const uint8_t *p = (const uint8_t *)data;
   while (size--)
@@ -68,6 +82,7 @@ static void usage(const char *name) {
 #endif
           "[--frames N|--seconds N] "
           "[--xex-frame N] [--start-frame N] [--trace-audio] [--audio-rate HZ] "
+          "[--defer] "
           "[--output "
           "frame.ppm] "
 #ifndef NO_SAVE_STATE
@@ -88,7 +103,7 @@ int main(int argc, char **argv) {
   const char *basic_rom = "ATARIBAS.ROM";
 #endif
   int frames = 180, xex_frame = A800_XEX_BOOT_FRAMES, start_frame = -1,
-      basic = 0, trace_audio = 0, audio_rate = 0;
+      basic = 0, trace_audio = 0, audio_rate = 0, defer = 0;
   double seconds = 0;
 #ifdef NO_NTSC
   AtariVideoStandard standard = A800_PAL;
@@ -121,6 +136,8 @@ int main(int argc, char **argv) {
       start_frame = atoi(argv[++i]);
     else if (!strcmp(argv[i], "--trace-audio"))
       trace_audio = 1;
+    else if (!strcmp(argv[i], "--defer"))
+      defer = 1;
     else if (!strcmp(argv[i], "--audio-rate") && i + 1 < argc)
       audio_rate = atoi(argv[++i]);
     else if (!strcmp(argv[i], "--output") && i + 1 < argc)
@@ -165,6 +182,10 @@ int main(int argc, char **argv) {
 #ifdef A800_LINE_BUFFER
   a.line_sink = capture_line;
 #endif
+  if (defer) {
+    a.line_defer = defer_line;
+    a.line_sink_context = &a;
+  }
   if (audio_rate)
     Pokey_Audio(&a, NULL, 0, audio_rate);
   if (seconds > 0)

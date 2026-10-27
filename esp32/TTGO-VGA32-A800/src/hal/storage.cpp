@@ -13,6 +13,15 @@ bool Storage_Init(void) {
          SD.begin(PIN_SD_CS, sd_spi, 1000000, "/sd");
 }
 
+/* Unmounts the card and releases the bus once everything is in RAM, so
+ * nothing touches it while the emulator runs. The card's pull-up on MISO
+ * (GPIO2, a strapping pin) remains, so flashing may still need the card
+ * out. */
+void Storage_End(void) {
+  SD.end();
+  sd_spi.end();
+}
+
 /* Builds MEDIA_DIR "/<first line of AUTORUN_FILE>"; false when there is
  * nothing to run. */
 bool Storage_ReadAutorun(char *path, int size) {

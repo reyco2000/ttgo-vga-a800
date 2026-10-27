@@ -36,6 +36,7 @@
 #define VIDEO_WIDTH 336
 #define VIDEO_HEIGHT 240
 #define VIDEO_CROP_X 24
+#define DRAW_ON_CORE1 1 /* draw lines without players/missiles on core 1 */
 
 /* Audio ISR period; POKEY is resampled to 1e6 / AUDIO_PERIOD_US Hz. */
 #define AUDIO_PERIOD_US 64

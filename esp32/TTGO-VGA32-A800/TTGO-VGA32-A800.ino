@@ -124,6 +124,7 @@ void setup() {
       Serial.printf("a800: warning: cannot mount %s\n", media);
     Serial.printf("a800: media %s\n", media);
   }
+  Storage_End(); /* ROMs and media are in RAM now */
   Serial.printf("a800: %s %s, BASIC %s\n", Atari_MachineName(atari),
                 atari->video_standard == A800_PAL ? "PAL" : "NTSC",
                 use_basic ? "on" : "off");

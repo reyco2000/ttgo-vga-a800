@@ -50,6 +50,7 @@ int State_Save(const Atari *a, const char *path) {
   image.palette = NULL;
   image.disk = image.xex_data = NULL;
   image.line_sink = NULL;
+  image.line_defer = NULL;
   image.line_sink_context = NULL;
   int failed =
       fwrite(&header, sizeof(header), 1, file) != 1 ||
@@ -108,6 +109,7 @@ int State_Load(Atari *a, const char *path) {
   free(a->xex_data);
   Atari_InvalidateMemoryMap(&image);
   image.line_sink = a->line_sink;
+  image.line_defer = a->line_defer;
   image.line_sink_context = a->line_sink_context;
   *a = image;
   a->disk = disk;
