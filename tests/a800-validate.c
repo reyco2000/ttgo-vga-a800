@@ -1,4 +1,5 @@
 #include "Atari.h"
+#include "Pokey.h"
 #ifndef NO_SAVE_STATE
 #include "State.h"
 #endif
@@ -22,13 +23,34 @@ static int extension_is(const char *path, const char *extension) {
   }
   return 1;
 }
+#ifdef A800_LINE_BUFFER
+static uint8_t frame_pixels[A800_WIDTH * A800_MAX_HEIGHT];
+static void capture_line(void *context, int y, const uint8_t *line) {
+  (void)context;
+  memcpy(frame_pixels + (size_t)y * A800_WIDTH, line, A800_WIDTH);
+}
+#endif
+static const uint8_t *frame_of(const Atari *a) {
+#ifdef A800_LINE_BUFFER
+  (void)a;
+  return frame_pixels;
+#else
+  return a->pixels;
+#endif
+}
+static uint64_t fnv1a(uint64_t hash, const void *data, size_t size) {
+  const uint8_t *p = (const uint8_t *)data;
+  while (size--)
+    hash = (hash ^ *p++) * 0x100000001b3ull;
+  return hash;
+}
 static int write_ppm(const Atari *a, const char *path) {
   FILE *f = fopen(path, "wb");
   if (!f)
     return -1;
   fprintf(f, "P6\n%d %d\n255\n", A800_WIDTH, a->frame_lines);
   for (int i = 0; i < A800_WIDTH * a->frame_lines; i++) {
-    uint32_t p = a->palette[a->pixels[i]];
+    uint32_t p = a->palette[frame_of(a)[i]];
     fputc((int)(p >> 16) & 255, f);
     fputc((int)(p >> 8) & 255, f);
     fputc((int)p & 255, f);
@@ -45,7 +67,8 @@ static void usage(const char *name) {
           "[--basic] "
 #endif
           "[--frames N|--seconds N] "
-          "[--xex-frame N] [--start-frame N] [--trace-audio] [--output "
+          "[--xex-frame N] [--start-frame N] [--trace-audio] [--audio-rate HZ] "
+          "[--output "
           "frame.ppm] "
 #ifndef NO_SAVE_STATE
           "[--load-state FILE] "
@@ -65,7 +88,7 @@ int main(int argc, char **argv) {
   const char *basic_rom = "ATARIBAS.ROM";
 #endif
   int frames = 180, xex_frame = A800_XEX_BOOT_FRAMES, start_frame = -1,
-      basic = 0, trace_audio = 0;
+      basic = 0, trace_audio = 0, audio_rate = 0;
   double seconds = 0;
 #ifdef NO_NTSC
   AtariVideoStandard standard = A800_PAL;
@@ -98,6 +121,8 @@ int main(int argc, char **argv) {
       start_frame = atoi(argv[++i]);
     else if (!strcmp(argv[i], "--trace-audio"))
       trace_audio = 1;
+    else if (!strcmp(argv[i], "--audio-rate") && i + 1 < argc)
+      audio_rate = atoi(argv[++i]);
     else if (!strcmp(argv[i], "--output") && i + 1 < argc)
       output = argv[++i];
 #ifndef NO_SAVE_STATE
@@ -112,7 +137,7 @@ int main(int argc, char **argv) {
     } else
       media = argv[i];
   }
-  if (frames < 1 || seconds < 0) {
+  if (frames < 1 || seconds < 0 || audio_rate < 0) {
     usage(argv[0]);
     return 2;
   }
@@ -137,6 +162,11 @@ int main(int argc, char **argv) {
     }
     Atari_SetVideoStandard(&a, standard);
   }
+#ifdef A800_LINE_BUFFER
+  a.line_sink = capture_line;
+#endif
+  if (audio_rate)
+    Pokey_Audio(&a, NULL, 0, audio_rate);
   if (seconds > 0)
     frames = (int)(seconds * a.frame_rate + .5);
   int xex = !load_state && media && extension_is(media, ".xex");
@@ -150,6 +180,8 @@ int main(int argc, char **argv) {
   }
   int loaded = !xex;
   uint8_t last_audio[9] = {0};
+  uint64_t video_hash = 0xcbf29ce484222325ull, audio_hash = video_hash,
+           audio_samples = 0;
   for (int frame = 0; frame < frames; frame++) {
     if (frame == start_frame)
       a.console &= (uint8_t)~1;
@@ -158,6 +190,15 @@ int main(int argc, char **argv) {
     Atari_Frame(&a);
     if (option_boot_frames && !--option_boot_frames)
       a.console |= 4;
+    video_hash = fnv1a(video_hash, frame_of(&a),
+                       (size_t)A800_WIDTH * (size_t)a.frame_lines);
+    while (audio_rate && a.audio_len) {
+      int16_t samples[512];
+      int n = a.audio_len < 512 ? a.audio_len : 512;
+      Pokey_Audio(&a, samples, n, audio_rate);
+      audio_hash = fnv1a(audio_hash, samples, (size_t)n * sizeof(*samples));
+      audio_samples += (uint64_t)n;
+    }
     if (xex && !loaded && frame == xex_frame - 1) {
       if (Atari_LoadExecutable(&a, media)) {
         fprintf(stderr, "a800-validate: XEX load failed: %s\n", media);
@@ -174,10 +215,11 @@ int main(int argc, char **argv) {
       memcpy(last_audio, a.pokey, 9);
     }
   }
-  uint8_t first = a.pixels[0];
+  const uint8_t *pixels = frame_of(&a);
+  uint8_t first = pixels[0];
   unsigned different = 0;
   for (int i = 0; i < A800_WIDTH * a.frame_lines; i++)
-    if (a.pixels[i] != first)
+    if (pixels[i] != first)
       different++;
   printf("machine=%s standard=%s frames=%d cycles=%llu\n",
          Atari_MachineName(&a), a.video_standard == A800_PAL ? "PAL" : "NTSC",
@@ -220,6 +262,9 @@ int main(int argc, char **argv) {
          a.pokey_skctl, a.pokey_skstat);
   printf("framebuffer=%dx%d pixels_different_from_corner=%u media=%s\n",
          A800_WIDTH, a.frame_lines, different, media ? media : "none");
+  printf("hash video=%016llx audio=%016llx samples=%llu\n",
+         (unsigned long long)video_hash, (unsigned long long)audio_hash,
+         (unsigned long long)audio_samples);
   if (output && !different)
     printf("capture=%s skipped=blank-frame\n", output);
   if (output && different && write_ppm(&a, output)) {

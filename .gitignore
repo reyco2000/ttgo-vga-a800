@@ -12,3 +12,5 @@ ATARIOSB.ROM
 5200.ROM
 *.state
 __pycache__/
+esp32/TTGO-VGA32-A800/src/core/
+esp32/TTGO-VGA32-A800/build/

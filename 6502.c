@@ -6,50 +6,52 @@
 
 enum { C = 1, Z = 2, I = 4, D = 8, B = 16, U = 32, V = 64, N = 128 };
 
-static uint8_t rd(Atari *m, uint16_t a) { return Atari_Read(m, a); }
-static void wr(Atari *m, uint16_t a, uint8_t v) { Atari_Write(m, a, v); }
-static uint8_t fetch(Atari *m) { return rd(m, m->pc++); }
-static uint16_t word(Atari *m) {
+A800_INLINE uint8_t rd(Atari *m, uint16_t a) { return Atari_ReadFast(m, a); }
+A800_INLINE void wr(Atari *m, uint16_t a, uint8_t v) {
+  Atari_WriteFast(m, a, v);
+}
+A800_INLINE uint8_t fetch(Atari *m) { return rd(m, m->pc++); }
+A800_INLINE uint16_t word(Atari *m) {
   uint8_t l = fetch(m);
   return (uint16_t)(l | fetch(m) << 8);
 }
-static void nz(Atari *m, uint8_t v) {
+A800_INLINE void nz(Atari *m, uint8_t v) {
   m->p = (uint8_t)((m->p & ~(N | Z)) | (v ? 0 : Z) | (v & N));
 }
-static void push(Atari *m, uint8_t v) { wr(m, (uint16_t)(0x100 | m->s--), v); }
-static uint8_t pull(Atari *m) { return rd(m, (uint16_t)(0x100 | ++m->s)); }
-static uint16_t zp(Atari *m) { return fetch(m); }
-static uint16_t zpx(Atari *m) { return (uint8_t)(fetch(m) + m->x); }
-static uint16_t zpy(Atari *m) { return (uint8_t)(fetch(m) + m->y); }
-static uint16_t ax(Atari *m) { return (uint16_t)(word(m) + m->x); }
-static uint16_t ay(Atari *m) { return (uint16_t)(word(m) + m->y); }
-static uint16_t ix(Atari *m) {
+A800_INLINE void push(Atari *m, uint8_t v) { wr(m, (uint16_t)(0x100 | m->s--), v); }
+A800_INLINE uint8_t pull(Atari *m) { return rd(m, (uint16_t)(0x100 | ++m->s)); }
+A800_INLINE uint16_t zp(Atari *m) { return fetch(m); }
+A800_INLINE uint16_t zpx(Atari *m) { return (uint8_t)(fetch(m) + m->x); }
+A800_INLINE uint16_t zpy(Atari *m) { return (uint8_t)(fetch(m) + m->y); }
+A800_INLINE uint16_t ax(Atari *m) { return (uint16_t)(word(m) + m->x); }
+A800_INLINE uint16_t ay(Atari *m) { return (uint16_t)(word(m) + m->y); }
+A800_HOT static uint16_t ix(Atari *m) {
   uint8_t z = (uint8_t)(fetch(m) + m->x);
   return (uint16_t)(rd(m, z) | rd(m, (uint8_t)(z + 1)) << 8);
 }
-static uint16_t iy(Atari *m) {
+A800_HOT static uint16_t iy(Atari *m) {
   uint8_t z = fetch(m);
   return (uint16_t)((rd(m, z) | rd(m, (uint8_t)(z + 1)) << 8) + m->y);
 }
-static uint16_t indexed(uint16_t base, uint8_t index, int *cycles) {
+A800_HOT static uint16_t indexed(uint16_t base, uint8_t index, int *cycles) {
   uint16_t result = (uint16_t)(base + index);
   if ((base ^ result) & 0xff00)
     (*cycles)++;
   return result;
 }
-static uint16_t axr(Atari *m, int *c) { return indexed(word(m), m->x, c); }
-static uint16_t ayr(Atari *m, int *c) { return indexed(word(m), m->y, c); }
-static uint16_t iyr(Atari *m, int *c) {
+A800_HOT static uint16_t axr(Atari *m, int *c) { return indexed(word(m), m->x, c); }
+A800_HOT static uint16_t ayr(Atari *m, int *c) { return indexed(word(m), m->y, c); }
+A800_HOT static uint16_t iyr(Atari *m, int *c) {
   uint8_t z = fetch(m);
   uint16_t base = (uint16_t)(rd(m, z) | rd(m, (uint8_t)(z + 1)) << 8);
   return indexed(base, m->y, c);
 }
-static void cmp(Atari *m, uint8_t r, uint8_t v) {
+A800_INLINE void cmp(Atari *m, uint8_t r, uint8_t v) {
   uint16_t q = (uint16_t)r - v;
   m->p = (uint8_t)((m->p & ~C) | (r >= v ? C : 0));
   nz(m, (uint8_t)q);
 }
-static void adc(Atari *m, uint8_t v) {
+A800_HOT static void adc(Atari *m, uint8_t v) {
   unsigned s;
   if (m->p & D) {
     unsigned lo = (m->a & 15) + (v & 15) + (m->p & C),
@@ -68,7 +70,7 @@ static void adc(Atari *m, uint8_t v) {
   m->a = (uint8_t)s;
   nz(m, m->a);
 }
-static void sbc(Atari *m, uint8_t v) {
+A800_HOT static void sbc(Atari *m, uint8_t v) {
   if (m->p & D) {
     int lo = (m->a & 15) - (v & 15) - (1 - (m->p & C)),
         hi = (m->a >> 4) - (v >> 4);
@@ -88,67 +90,67 @@ static void sbc(Atari *m, uint8_t v) {
   nz(m, m->a);
 }
 #ifdef A800_UNDOCUMENTED_OPCODES
-static uint8_t asl(Atari *m, uint8_t v) {
+A800_INLINE uint8_t asl(Atari *m, uint8_t v) {
   m->p = (uint8_t)((m->p & ~C) | (v >> 7));
   v <<= 1;
   nz(m, v);
   return v;
 }
-static uint8_t lsr(Atari *m, uint8_t v) {
+A800_INLINE uint8_t lsr(Atari *m, uint8_t v) {
   m->p = (uint8_t)((m->p & ~C) | (v & 1));
   v >>= 1;
   nz(m, v);
   return v;
 }
-static uint8_t rol(Atari *m, uint8_t v) {
+A800_INLINE uint8_t rol(Atari *m, uint8_t v) {
   uint8_t carry = m->p & C;
   m->p = (uint8_t)((m->p & ~C) | (v >> 7));
   v = (uint8_t)((v << 1) | carry);
   nz(m, v);
   return v;
 }
-static uint8_t ror(Atari *m, uint8_t v) {
+A800_INLINE uint8_t ror(Atari *m, uint8_t v) {
   uint8_t carry = (uint8_t)((m->p & C) << 7);
   m->p = (uint8_t)((m->p & ~C) | (v & 1));
   v = (uint8_t)((v >> 1) | carry);
   nz(m, v);
   return v;
 }
-static void slo(Atari *m, uint16_t q) {
+A800_HOT static void slo(Atari *m, uint16_t q) {
   uint8_t v = asl(m, rd(m, q));
   wr(m, q, v);
   m->a |= v;
   nz(m, m->a);
 }
-static void rla(Atari *m, uint16_t q) {
+A800_HOT static void rla(Atari *m, uint16_t q) {
   uint8_t v = rol(m, rd(m, q));
   wr(m, q, v);
   m->a &= v;
   nz(m, m->a);
 }
-static void sre(Atari *m, uint16_t q) {
+A800_HOT static void sre(Atari *m, uint16_t q) {
   uint8_t v = lsr(m, rd(m, q));
   wr(m, q, v);
   m->a ^= v;
   nz(m, m->a);
 }
-static void rra(Atari *m, uint16_t q) {
+A800_HOT static void rra(Atari *m, uint16_t q) {
   uint8_t v = ror(m, rd(m, q));
   wr(m, q, v);
   adc(m, v);
 }
-static void dcp(Atari *m, uint16_t q) {
+A800_HOT static void dcp(Atari *m, uint16_t q) {
   uint8_t v = (uint8_t)(rd(m, q) - 1);
   wr(m, q, v);
   cmp(m, m->a, v);
 }
-static void isc(Atari *m, uint16_t q) {
+A800_HOT static void isc(Atari *m, uint16_t q) {
   uint8_t v = (uint8_t)(rd(m, q) + 1);
   wr(m, q, v);
   sbc(m, v);
 }
 #endif
-static void interrupt(Atari *m, uint16_t vector, int brk) {
+A800_HOT static void interrupt(Atari *m, uint16_t vector, int brk) {
   push(m, (uint8_t)(m->pc >> 8));
   push(m, (uint8_t)m->pc);
   push(m, (uint8_t)((m->p & ~B) | U | (brk ? B : 0)));
@@ -162,8 +164,8 @@ void Cpu_Reset(Atari *m) {
   m->pc = (uint16_t)(rd(m, 0xfffc) | rd(m, 0xfffd) << 8);
   m->stopped = 0;
 }
-void Cpu_Nmi(Atari *m) { interrupt(m, 0xfffa, 0); }
-void Cpu_Irq(Atari *m) {
+A800_HOT void Cpu_Nmi(Atari *m) { interrupt(m, 0xfffa, 0); }
+A800_HOT void Cpu_Irq(Atari *m) {
   if (!(m->p & I))
     interrupt(m, 0xfffe, 0);
 }
@@ -194,7 +196,7 @@ void Cpu_Irq(Atari *m) {
     }                                                                          \
   } while (0)
 
-int Cpu_Step(Atari *m) {
+A800_HOT int Cpu_Step(Atari *m) {
   uint8_t op;
   uint16_t q;
   int c = 2;

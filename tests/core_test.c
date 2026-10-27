@@ -38,8 +38,10 @@ static void test_rom_xex(void) {
     Atari a = {0};
     assert(!AtariIo_LoadOs(&a, "core_test_os.xex"));
     assert(a.machine_type == cases[i].machine);
-    if (a.machine_type == A800_MACHINE_XL)
+    if (a.machine_type == A800_MACHINE_XL) {
       a.pia_ddr[1] = 0xff, a.pia[1] = 0x7f;
+      Atari_InvalidateMemoryMap(&a);
+    }
     assert(Atari_Read(&a, cases[i].address) == 0x5a);
   }
   assert(!remove("core_test_os.xex"));
@@ -121,6 +123,7 @@ int main(void) {
   a.pia_ddr[1] = 1;
   a.machine_type = A800_MACHINE_XL;
   a.os_pages[31] = 0x80;
+  Atari_InvalidateMemoryMap(&a);
   a.os[0x3ffc] = 0x34;
   a.os[0x3ffd] = 0x12;
   Cpu_Reset(&a);
@@ -217,7 +220,7 @@ int main(void) {
   Pokey_Audio(&a, ultrasonic, 4096, 44100);
   for (int i = 0; i < 4096; i++)
     assert(ultrasonic[i] <= 20000 && ultrasonic[i] >= -20000);
-  a.audio_phase[0] = .5;
+  a.audio_phase[0] = 0;
   a.audio_output[0] = 1;
   Pokey_Write(&a, 0xd209, 0);
   assert(a.audio_phase[0] > 0);
@@ -281,6 +284,7 @@ int main(void) {
   Atari_SetVideoStandard(&a, A800_NTSC);
   a.pia[1] = 0;
   a.pia_ddr[1] = 0xff;
+  Atari_InvalidateMemoryMap(&a);
   a.antic[0] = 0x22;
   a.antic[2] = 0x00;
   a.antic[3] = 0x02;
@@ -387,6 +391,7 @@ int main(void) {
   a.antic[0] = 0x22;
   a.pia_ddr[1] = 0xff;
   a.pia[1] = 0;
+  Atari_InvalidateMemoryMap(&a);
   a.ram[0x200] = 0x4f;
   a.ram[0x201] = 0xf0;
   a.ram[0x202] = 0xff;
@@ -403,6 +408,7 @@ int main(void) {
   Atari_SetVideoStandard(&a, A800_NTSC);
   a.pia[1] = 0;
   a.pia_ddr[1] = 0xff;
+  Atari_InvalidateMemoryMap(&a);
   a.antic[0] = 0x1a;
   a.antic[7] = 0x30;
   a.line_gtia[40][0] = 0x80;
@@ -428,6 +434,7 @@ int main(void) {
   Atari_SetVideoStandard(&a, A800_NTSC);
   a.pia[1] = 0;
   a.pia_ddr[1] = 0xff;
+  Atari_InvalidateMemoryMap(&a);
   a.antic[0] = 0x3e;
   a.antic[2] = 0;
   a.antic[3] = 2;
@@ -469,6 +476,7 @@ int main(void) {
   Atari_SetVideoStandard(&a, A800_NTSC);
   a.pia[1] = 0;
   a.pia_ddr[1] = 0xff;
+  Atari_InvalidateMemoryMap(&a);
   a.antic[0] = 0x22;
   a.antic[2] = 0;
   a.antic[3] = 2;
@@ -525,6 +533,7 @@ int main(void) {
   Atari_SetVideoStandard(&timed, A800_NTSC);
   timed.pia_ddr[1] = 0xff;
   timed.pia[1] = 0;
+  Atari_InvalidateMemoryMap(&timed);
   timed.pc = 0x200;
   timed.ram[0x200] = 0x4c;
   timed.ram[0x201] = 0;

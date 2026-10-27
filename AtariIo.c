@@ -123,6 +123,7 @@ int AtariIo_LoadOs(Atari *a, const char *path) {
       os_page(a, page << 8);
   } else
     failed = -1;
+  Atari_InvalidateMemoryMap(a);
   free(data);
   return failed;
 }
@@ -255,6 +256,7 @@ int Atari_LoadExecutableData(Atari *a, const uint8_t *data, size_t size) {
   a->ram[0x2e0] = a->ram[0x2e1] = a->ram[0x2e2] = a->ram[0x2e3] = 0;
   a->pia_ddr[1] = 0xff;
   a->pia[1] |= 0x83;
+  Atari_InvalidateMemoryMap(a);
   a->pia[3] |= 4;
   a->console |= 4;
   a->option_override = 64;

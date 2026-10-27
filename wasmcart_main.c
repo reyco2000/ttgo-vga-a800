@@ -120,14 +120,7 @@ static void input(void) {
       continue;
     if (control)
       code |= 0x80;
-    machine.keycode = code;
-    if (now) {
-      machine.pokey_skstat &= ~4;
-      machine.pokey_irqst &= ~0x40;
-      if (machine.pokey_irqen & 0x40)
-        machine.irq = 1;
-    } else
-      machine.pokey_skstat |= 4;
+    Pokey_KeyEvent(&machine, code, now);
   }
   memcpy(previous, wc_keys, sizeof(previous));
 }
