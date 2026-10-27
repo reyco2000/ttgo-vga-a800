@@ -13,7 +13,7 @@ SKETCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SKETCH_DIR/../.." && pwd)"
 FQBN="esp32:esp32:esp32wrover:PartitionScheme=huge_app"
 # Must be identical for C and C++ so both see the same Atari layout.
-CORE_FLAGS="-include esp_attr.h -DA800_HOT=IRAM_ATTR -DA800_LINE_BUFFER=1 -DA800_AUDIO_BUFFER=1024 -DNO_SAVE_STATE=1 -DA800_UNDOCUMENTED_OPCODES=1"
+CORE_FLAGS="-include esp_attr.h -DA800_HOT=IRAM_ATTR -DA800_NO_PSRAM_MEMW=1 -DA800_LINE_BUFFER=1 -DA800_AUDIO_BUFFER=1024 -DNO_SAVE_STATE=1 -DA800_UNDOCUMENTED_OPCODES=1"
 
 mkdir -p "$SKETCH_DIR/src/core"
 rm -f "$SKETCH_DIR/src/core/"*.[ch]

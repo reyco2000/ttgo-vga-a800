@@ -24,7 +24,7 @@ void Antic_Write(Atari *a, uint16_t address, uint8_t value) {
   }
   a->antic[r] = value;
 }
-A800_HOT void Antic_CaptureLine(Atari *a) {
+void Antic_CaptureLine(Atari *a) {
   int y = a->scanline, one = (a->antic[0] & 0x10) != 0;
   unsigned row = (unsigned)(one ? y : y / 2);
   uint16_t base = (uint16_t)((a->antic[7] & (one ? 0xf8 : 0xfc)) << 8);
@@ -81,7 +81,7 @@ A800_INLINE void pfspan(const Target *t, int x, int n, uint8_t c,
   for (int i = 0; i < n; i++)
     t->hits[x + i] |= mask;
 }
-static int line_bytes(int mode, int width) {
+A800_INLINE int line_bytes(int mode, int width) {
   if (!width)
     return 0;
   if (mode == 6 || mode == 7)
@@ -92,7 +92,7 @@ static int line_bytes(int mode, int width) {
     return width == 3 ? 24 : width == 2 ? 20 : 16;
   return width == 3 ? 48 : width == 2 ? 40 : 32;
 }
-static int fetch_bytes(const AnticLine *l) {
+A800_INLINE int fetch_bytes(const AnticLine *l) {
   int scroll = (l->scroll & 0x10) != 0;
   return line_bytes(l->mode, scroll && l->width < 3 ? l->width + 1 : l->width);
 }
@@ -133,7 +133,7 @@ static void fetch_line(Atari *a, AnticLine *l, uint16_t mem) {
     }
   }
 }
-static void draw_gtia_mode(const Target *t, const AnticLine *l, int x, int b,
+A800_INLINE void draw_gtia_mode(const Target *t, const AnticLine *l, int x, int b,
                            uint8_t d, uint8_t prior, uint8_t bg,
                            const uint8_t pf[4]) {
   for (int k = 0; k < 2; k++) {
@@ -354,10 +354,6 @@ static void draw_pmg(const Target *t, const AnticLine *l,
       missile_pixel(t, l, collisions, x + 2 * s, 2 * s, m);
   }
 }
-int Antic_LineHasPmg(const AnticLine *l) {
-  return l->pmg_area &&
-         (l->pmg[0] | l->pmg[1] | l->pmg[2] | l->pmg[3] | l->pmg[4]) != 0;
-}
 A800_HOT void Antic_DrawLine(const AnticLine *l, uint8_t *pixels,
                              uint16_t *hits, uint8_t *collisions) {
   Target t = {pixels, hits};
@@ -438,7 +434,7 @@ void Antic_BeginLine(Atari *a, int y) {
       a->nmi = 1;
   }
 }
-A800_HOT int Antic_DmaCycles(const Atari *a) {
+int Antic_DmaCycles(const Atari *a) {
   int cycles = a->display_dma_bytes; /* display-list bytes */
   if (a->antic[0] & 8)
     cycles += 4;

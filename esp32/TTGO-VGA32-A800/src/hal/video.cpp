@@ -36,10 +36,14 @@ static void IRAM_ATTR line_sink(void *context, int y, const uint8_t *line) {
  * and stores it in the framebuffer. One producer, one consumer; the queue
  * bounds how far drawing lags, well under a frame, so a row is never
  * overwritten by an older line. */
+/* A real memw for the cross-core hand-off: with A800_NO_PSRAM_MEMW the
+ * mnemonic assembles to nothing, and __sync_synchronize() emits it. */
+#define MEMORY_BARRIER() __asm__ volatile(".byte 0xc0, 0x20, 0x00" ::: "memory")
 enum { QUEUE_LINES = 64 };
 static AnticLine *queue; /* from the heap, after the framebuffer */
 static volatile uint32_t queued, drawn;
 static volatile bool drawer_idle;
+static volatile uint32_t drawer_busy_us;
 static TaskHandle_t drawer;
 
 static void IRAM_ATTR defer_line(void *context, const AnticLine *line) {
@@ -47,7 +51,7 @@ static void IRAM_ATTR defer_line(void *context, const AnticLine *line) {
   while (queued - drawn >= QUEUE_LINES)
     ; /* core 1 is a full queue behind: wait for a slot */
   queue[queued % QUEUE_LINES] = *line;
-  __sync_synchronize();
+  MEMORY_BARRIER();
   queued = queued + 1;
   if (drawer_idle)
     xTaskNotifyGive(drawer);
@@ -58,20 +62,30 @@ static void draw_task(void *context) {
   for (;;) {
     if (drawn == queued) {
       drawer_idle = true;
-      __sync_synchronize();
+      MEMORY_BARRIER();
       if (drawn == queued)
         ulTaskNotifyTake(pdTRUE, 1);
       drawer_idle = false;
       continue;
     }
     const AnticLine *line = &queue[drawn % QUEUE_LINES];
+    int64_t start = esp_timer_get_time();
     Antic_DrawLine(line, pixels, NULL, NULL);
     line_sink(context, line->y, pixels);
-    __sync_synchronize();
+    drawer_busy_us = drawer_busy_us + (uint32_t)(esp_timer_get_time() - start);
+    MEMORY_BARRIER();
     drawn = drawn + 1;
   }
 }
 #endif
+
+uint32_t Video_DrawerBusyUs(void) {
+#if DRAW_ON_CORE1
+  return drawer_busy_us;
+#else
+  return 0;
+#endif
+}
 
 static uint8_t channel(uint32_t value) { return (uint8_t)((value * 3 + 127) / 255); }
 

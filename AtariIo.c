@@ -1,3 +1,5 @@
+/* Sector writes store into the disk image, which may live in PSRAM. */
+#define A800_PSRAM_STORES
 #include "AtariIo.h"
 #include "6502.h"
 #include "Pokey.h"

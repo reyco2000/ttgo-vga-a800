@@ -8,6 +8,7 @@ extern "C" {
 
 /* FabGL VGA output; installs the core's line sink. */
 bool Video_Init(Atari *a);
+uint32_t Video_DrawerBusyUs(void); /* core 1 drawing time so far */
 
 /* DAC1 timer ISR fed from a ring buffer. */
 void Audio_Init(void);

@@ -1,7 +1,7 @@
 #include "Pokey.h"
 #include <string.h>
 
-A800_HOT static unsigned period(const uint8_t *r, int ch) {
+A800_INLINE unsigned period(const uint8_t *r, int ch) {
   uint8_t ctl = r[8];
   unsigned base = (ctl & 1) ? 114u : 28u;
   if (ch == 1 && (ctl & 0x10)) {
@@ -16,7 +16,7 @@ A800_HOT static unsigned period(const uint8_t *r, int ch) {
     return (unsigned)r[ch * 2] + 4u;
   return ((unsigned)r[ch * 2] + 1u) * base;
 }
-static unsigned timer_period(const Atari *a, int ch) {
+A800_INLINE unsigned timer_period(const Atari *a, int ch) {
   return period(a->pokey, ch);
 }
 static uint32_t poly4_step(uint32_t p) {
@@ -78,12 +78,12 @@ static void init_cycles(void) {
   for (int i = 0; i < 31; i++, p = poly5_step(p))
     seq5[i] = (uint8_t)p, pos5[p] = (uint8_t)i;
 }
-A800_HOT static uint32_t poly4_advance(uint32_t p, uint32_t k) {
+A800_INLINE uint32_t poly4_advance(uint32_t p, uint32_t k) {
   init_cycles();
   p &= 15u;
   return p == 15u ? p : seq4[(pos4[p] + k % 15u) % 15u];
 }
-A800_HOT static uint32_t poly5_advance(uint32_t p, uint32_t k) {
+A800_INLINE uint32_t poly5_advance(uint32_t p, uint32_t k) {
   init_cycles();
   p &= 31u;
   return p == 31u ? p : seq5[(pos5[p] + k % 31u) % 31u];
@@ -104,11 +104,19 @@ typedef struct {
   int ready;
 } Jump;
 static Jump cache9, cache17;
-A800_HOT static uint32_t linear_advance(Jump *c, uint32_t (*jump)[17],
-                                        int bits, uint32_t p, uint32_t k) {
+static uint32_t linear_slow(Jump *c, uint32_t (*jump)[17], int bits,
+                            uint32_t p, uint32_t k);
+A800_INLINE uint32_t linear_advance(Jump *c, uint32_t (*jump)[17], int bits,
+                                    uint32_t p, uint32_t k) {
   if (c->ready && c->k == k)
     return c->table[0][p & 255] ^ c->table[1][(p >> 8) & 255] ^
            c->table[2][(p >> 16) & 255];
+  return linear_slow(c, jump, bits, p, k);
+}
+/* A count seen for the first time runs through the matrices; a count that
+ * repeats gets its tables built. */
+static uint32_t linear_slow(Jump *c, uint32_t (*jump)[17], int bits,
+                                     uint32_t p, uint32_t k) {
   if (k != c->last) {
     c->last = k;
     return matrix_advance(jump, bits, p, k);
@@ -127,14 +135,15 @@ A800_HOT static uint32_t linear_advance(Jump *c, uint32_t (*jump)[17],
   }
   c->k = k;
   c->ready = 1;
-  return linear_advance(c, jump, bits, p, k);
+  return c->table[0][p & 255] ^ c->table[1][(p >> 8) & 255] ^
+         c->table[2][(p >> 16) & 255];
 }
-A800_HOT static uint32_t poly9_advance(uint32_t p, uint32_t k) {
+A800_INLINE uint32_t poly9_advance(uint32_t p, uint32_t k) {
   init_jumps();
   return linear_advance(&cache9, jump9, 9, p & 0x1ffu,
                         k % 511u);
 }
-A800_HOT static uint32_t poly17_advance(uint32_t p, uint32_t k) {
+A800_INLINE uint32_t poly17_advance(uint32_t p, uint32_t k) {
   init_jumps();
   return linear_advance(&cache17, jump17, 17, p & 0x1ffffu,
                         k % 131071u);
@@ -232,7 +241,7 @@ A800_HOT void Pokey_Timers(Atari *a, int cycles) {
   a->irq = (uint8_t)(a->pokey_irqst | ~a->pokey_irqen) != 0xff;
 }
 /* Mixed volume of the four channels for the current outputs. */
-A800_HOT static unsigned audio_level(const Atari *a) {
+A800_INLINE unsigned audio_level(const Atari *a) {
   unsigned sum = 0;
   for (int ch = 0; ch < 4; ch++) {
     uint8_t ctl = a->pokey[ch * 2 + 1];
@@ -249,6 +258,16 @@ A800_HOT static unsigned audio_level(const Atari *a) {
   return sum;
 }
 static void emit_sample(Atari *a) {
+  if (!a->audio_sum && a->audio_previous == 0 && a->audio_filter == 0) {
+    /* Settled silence: the arithmetic below would leave both filter terms
+     * at +0 and give a zero sample; skip the soft-float work. (Neither term
+     * can be -0 here: previous is a mean of volumes, and a negative filter
+     * value never rounds to -0.) */
+    a->audio_clocks = 0;
+    if (a->audio_len < A800_AUDIO_BUFFER)
+      a->audio_buffer[a->audio_len++] = 0;
+    return;
+  }
   double sum = (double)a->audio_sum / a->audio_clocks;
   a->audio_sum = 0;
   a->audio_clocks = 0;
@@ -273,18 +292,33 @@ A800_HOT static void synthesize(Atari *a, uint32_t cycles) {
   const uint8_t *r = a->pokey;
   int poly_on = (a->pokey_skctl & 3) != 0;
   uint32_t lag4 = 0, lag5 = 0, lag9 = 0, lag17 = 0;
-  unsigned rate = (unsigned)a->audio_rate, sum = audio_level(a);
-  for (int ch = 0; ch < 4; ch++)
-    if (a->audio_phase[ch] <= 0)
-      a->audio_phase[ch] = (int32_t)period(r, ch);
+  /* With every volume at zero the mix is zero whatever the outputs are. */
+  int audible = ((r[1] | r[3] | r[5] | r[7]) & 15) != 0;
+  /* At or above the CPU clock every clock yields one sample, as it did when
+   * the phase was a double; capping keeps the integer phase from growing
+   * by rate - cpu_hz per clock until it wraps. */
+  unsigned rate = (unsigned)a->audio_rate < a->cpu_hz ? (unsigned)a->audio_rate
+                                                      : a->cpu_hz,
+           sum = audible ? audio_level(a) : 0;
+  /* The registers cannot change during a span (writes flush first), so the
+   * periods and which channels sample anything are fixed for it. */
+  int32_t phase[4], reload[4];
+  int live[4];
+  for (int ch = 0; ch < 4; ch++) {
+    reload[ch] = (int32_t)period(r, ch);
+    phase[ch] = a->audio_phase[ch] <= 0 ? reload[ch] : a->audio_phase[ch];
+    live[ch] = poly_on &&
+               !((ch == 0 && (r[8] & 0x10)) || (ch == 2 && (r[8] & 8)));
+  }
+  /* Clocks until the next sample; s clocks without one shorten it by s. */
+  uint32_t due = a->audio_poly_phase >= a->cpu_hz
+                     ? 1
+                     : (a->cpu_hz - a->audio_poly_phase + rate - 1) / rate;
   while (cycles) {
     uint32_t step = cycles;
     for (int ch = 0; ch < 4; ch++)
-      if ((uint32_t)a->audio_phase[ch] < step)
-        step = (uint32_t)a->audio_phase[ch];
-    uint32_t due = a->audio_poly_phase >= a->cpu_hz
-                       ? 1
-                       : (a->cpu_hz - a->audio_poly_phase + rate - 1) / rate;
+      if ((uint32_t)phase[ch] < step)
+        step = (uint32_t)phase[ch];
     if (due < step)
       step = due;
     /* step - 1 quiet clocks, then the clock on which something happens. */
@@ -299,12 +333,11 @@ A800_HOT static void synthesize(Atari *a, uint32_t cycles) {
     }
     int fired = 0;
     for (int ch = 0; ch < 4; ch++) {
-      if ((a->audio_phase[ch] -= (int32_t)step) > 0)
+      if ((phase[ch] -= (int32_t)step) > 0)
         continue;
-      a->audio_phase[ch] = (int32_t)period(r, ch);
+      phase[ch] = reload[ch];
       fired = 1;
-      int joined_low = (ch == 0 && (r[8] & 0x10)) || (ch == 2 && (r[8] & 8));
-      if (joined_low || !poly_on)
+      if (!live[ch])
         continue;
       uint8_t ctl = r[ch * 2 + 1];
       /* Catch up the counter this channel samples at every firing, clocked
@@ -337,17 +370,22 @@ A800_HOT static void synthesize(Atari *a, uint32_t cycles) {
       if (ch == 3 && (r[8] & 2))
         a->audio_hp[1] = a->audio_output[1];
     }
-    if (fired)
+    if (fired && audible)
       sum = audio_level(a);
     a->audio_sum += sum;
     a->audio_clocks++;
     a->audio_poly_phase += rate;
+    due -= step;
     if (a->audio_poly_phase >= a->cpu_hz) {
       a->audio_poly_phase -= a->cpu_hz;
       emit_sample(a);
+      due = a->audio_poly_phase >= a->cpu_hz
+                ? 1
+                : (a->cpu_hz - a->audio_poly_phase + rate - 1) / rate;
     }
     cycles -= step;
   }
+  memcpy(a->audio_phase, phase, sizeof(phase));
   a->audio_poly4 = poly4_advance(a->audio_poly4, lag4);
   a->audio_poly5 = poly5_advance(a->audio_poly5, lag5);
   a->audio_poly9 = poly9_advance(a->audio_poly9, lag9);
@@ -358,7 +396,7 @@ A800_HOT void Pokey_Flush(Atari *a) {
   a->audio_pending = 0;
   synthesize(a, pending);
 }
-A800_HOT void Pokey_Advance(Atari *a, int cycles) {
+void Pokey_Advance(Atari *a, int cycles) {
   Pokey_Timers(a, cycles);
   a->audio_pending += (uint32_t)cycles;
   Pokey_Flush(a);

@@ -24,6 +24,16 @@ enum { A800_PIXEL_ROWS = A800_MAX_HEIGHT };
 #ifndef A800_HOT
 #define A800_HOT
 #endif
+/* ESP32 before silicon rev 3 (errata CPU-3.9) needs -mfix-esp32-psram-cache-
+ * issue, which puts a memw after every store in every file. Builds that
+ * define A800_NO_PSRAM_MEMW turn the compiler's memw into nothing in each
+ * file that includes this header: their stores all go to internal RAM. A
+ * file that stores to PSRAM (heap blocks such as the disk image) defines
+ * A800_PSRAM_STORES before its includes to keep the workaround. */
+#if defined(A800_NO_PSRAM_MEMW) && defined(__XTENSA__) && \
+    !defined(A800_PSRAM_STORES)
+__asm__(".macro memw\n.endm");
+#endif
 /* For tiny helpers used from very large functions (Cpu_Step), where GCC's
  * growth limits would otherwise leave them as calls. */
 #if defined(__GNUC__)

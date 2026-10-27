@@ -36,22 +36,20 @@ static bool is_xex(const char *path) {
 }
 
 #if BENCH_AT_BOOT
-/* Splits the cost of a frame on the board itself: full frames, frames
- * without POKEY audio synthesis, without the VGA line sink, and ANTIC
- * rendering alone. Machine state is disturbed, so the machine is reset. */
-static float bench(const char *label, int render_only) {
+/* Prices the pieces of a frame on the board itself. Machine state is
+ * disturbed, so the machine is reset afterwards. */
+static float bench(const char *label) {
   int64_t start = esp_timer_get_time();
   for (int i = 0; i < 60; i++)
-    render_only ? Antic_Frame(atari) : Atari_Frame(atari);
+    Atari_Frame(atari);
   float ms = (esp_timer_get_time() - start) / 60000.0f;
-  Serial.printf("bench %-22s %6.2f ms/frame\n", label, ms);
+  Serial.printf("bench %-10s %6.2f ms/frame\n", label, ms);
   atari->audio_len = 0;
   return ms;
 }
-/* Host cycles per call for the pieces of a scanline. */
+/* Host cycles per call. */
 static void cycle_bench(void) {
-  uint32_t t = cpu_hal_get_cycle_count();
-  uint32_t emulated = 0;
+  uint32_t t = cpu_hal_get_cycle_count(), emulated = 0;
   for (int i = 0; i < 20000; i++)
     emulated += (uint32_t)Cpu_Step(atari);
   uint32_t step = cpu_hal_get_cycle_count() - t;
@@ -64,24 +62,43 @@ static void cycle_bench(void) {
   for (int i = 0; i < 2000; i++)
     Antic_CaptureLine(atari);
   uint32_t capture = cpu_hal_get_cycle_count() - t;
-  Serial.printf("bench Cpu_Step %u cycles (%u per emulated cycle), "
-                "Pokey_Clock %u, CaptureLine %u\n",
+  AnticLine line;
+  t = cpu_hal_get_cycle_count();
+  for (int i = 0; i < 2000; i++)
+    Antic_PrepareLine(atari, 100, &line);
+  uint32_t prepare = cpu_hal_get_cycle_count() - t;
+  /* POKEY's per-sample DC filter, in the same double arithmetic. */
+  volatile double previous = 0, filter = 0;
+  volatile int16_t out = 0;
+  t = cpu_hal_get_cycle_count();
+  for (int i = 0; i < 2000; i++) {
+    double sum = (double)(uint32_t)(i * 7 % 61) / (61 + (i & 7));
+    double filtered = sum - previous + 0.995 * filter;
+    previous = sum;
+    filter = filtered;
+    if (filtered > 40)
+      filtered = 40;
+    if (filtered < -40)
+      filtered = -40;
+    out = (int16_t)(filtered * 500.0);
+  }
+  uint32_t sample = cpu_hal_get_cycle_count() - t;
+  Serial.printf("bench cycles: Cpu_Step %u (%u per emulated cycle), "
+                "Pokey_Clock %u, CaptureLine %u, PrepareLine %u, "
+                "sample filter %u\n",
                 (unsigned)(step / 20000), (unsigned)(step / emulated),
-                (unsigned)(clock / 20000), (unsigned)(capture / 2000));
+                (unsigned)(clock / 20000), (unsigned)(capture / 2000),
+                (unsigned)(prepare / 2000), (unsigned)(sample / 2000));
 }
 static void run_bench(void) {
   for (int i = 0; i < 120; i++)
     Atari_Frame(atari), atari->audio_len = 0;
-  void (*sink)(void *, int, const uint8_t *) = atari->line_sink;
   cycle_bench();
-  bench("full", 0);
+  bench("full");
+  int rate = atari->audio_rate;
   atari->audio_rate = 0;
-  bench("no audio", 0);
-  atari->line_sink = NULL;
-  bench("no audio, no sink", 0);
-  bench("ANTIC render only", 1);
-  atari->line_sink = sink;
-  bench("ANTIC render + sink", 1);
+  bench("no audio");
+  atari->audio_rate = rate;
   Atari_Reset(atari);
   boot_without_basic();
   atari->audio_len = 0;
@@ -128,11 +145,6 @@ void setup() {
   Serial.printf("a800: %s %s, BASIC %s\n", Atari_MachineName(atari),
                 atari->video_standard == A800_PAL ? "PAL" : "NTSC",
                 use_basic ? "on" : "off");
-#if BENCH_AT_BOOT
-  Serial.printf("bench CPU %u MHz, machine at %p, before VGA:\n",
-                (unsigned)getCpuFrequencyMhz(), (void *)atari);
-  run_bench();
-#endif
   if (!Video_Init(atari))
     halt("cannot allocate the VGA framebuffer");
   Keyboard_Init();
@@ -153,7 +165,7 @@ void setup() {
 /* One emulated frame plus audio hand-off, pacing and statistics. */
 static void run_frame(void) {
   static int16_t samples[512];
-  static uint32_t stats_start, stats_frames, stats_underruns;
+  static uint32_t stats_start, stats_frames, stats_underruns, stats_drawer;
   static int64_t emulated_us;
   if (Keyboard_Poll(atari) & KEY_ACTION_RESET) {
     Atari_Reset(atari);
@@ -179,12 +191,15 @@ static void run_frame(void) {
   stats_frames++;
   uint32_t now = millis();
   if (now - stats_start >= STATS_PERIOD_MS) {
-    uint32_t underruns = Audio_Underruns();
-    Serial.printf("a800: %.1f fps, %.2f ms/frame emulated, %u underruns\n",
+    uint32_t underruns = Audio_Underruns(), drawer = Video_DrawerBusyUs();
+    Serial.printf("a800: %.1f fps, %.2f ms/frame emulated, %u underruns, "
+                  "core 1 drawing %.0f%%\n",
                   stats_frames * 1000.0f / (now - stats_start),
                   emulated_us / 1000.0f / stats_frames,
-                  (unsigned)(underruns - stats_underruns));
+                  (unsigned)(underruns - stats_underruns),
+                  (drawer - stats_drawer) / 10.0f / (now - stats_start));
     stats_underruns = underruns;
+    stats_drawer = drawer;
     stats_start = now;
     stats_frames = 0;
     emulated_us = 0;

@@ -26,5 +26,8 @@ void Antic_PrepareLine(Atari *a, int y, AnticLine *line);
  * which Antic_LineHasPmg() is false need neither. */
 void Antic_DrawLine(const AnticLine *line, uint8_t *pixels, uint16_t *hits,
                     uint8_t *collisions);
-int Antic_LineHasPmg(const AnticLine *line);
+static inline int Antic_LineHasPmg(const AnticLine *line) {
+  return line->pmg_area && (line->pmg[0] | line->pmg[1] | line->pmg[2] |
+                            line->pmg[3] | line->pmg[4]) != 0;
+}
 #endif

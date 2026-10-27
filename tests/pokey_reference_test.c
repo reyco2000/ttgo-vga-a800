@@ -91,10 +91,15 @@ static unsigned audio_cycle(Atari *a) {
   return sum;
 }
 static void reference_advance(Atari *a, int cycles) {
+  /* The original kept the phase in a double; above the CPU clock it then
+   * emitted one sample per clock. Capping the rate gives the same samples
+   * with a phase that cannot wrap. */
+  unsigned rate = (unsigned)a->audio_rate < a->cpu_hz ? (unsigned)a->audio_rate
+                                                      : a->cpu_hz;
   for (int i = 0; i < cycles; i++) {
     a->audio_sum += audio_cycle(a);
     a->audio_clocks++;
-    a->audio_poly_phase += (unsigned)a->audio_rate;
+    a->audio_poly_phase += rate;
     if (a->audio_poly_phase >= a->cpu_hz) {
       a->audio_poly_phase -= a->cpu_hz;
       double sum = (double)a->audio_sum / a->audio_clocks;
@@ -201,6 +206,38 @@ int main(void) {
     }
     Pokey_Flush(&fast);
     same(&ref, &fast);
+  }
+  /* Silence from power-on (the DC filter is exactly zero: the settled-
+   * silence fast path), sound, silence again (the filter decays into the
+   * denormals and sticks there, so the slow path runs), and sound once more.
+   * One sample per CPU clock keeps the run short. */
+  memset(&ref, 0, sizeof(ref));
+  ref.cpu_hz = 1789772u;
+  ref.audio_rate = 1789772;
+  ref.audio_poly4 = ref.audio_poly5 = ref.audio_poly9 = ref.audio_poly17 = 1;
+  ref.rng = ref.pokey_random_poly9 = 1;
+  ref.pokey_skctl = 3;
+  fast = ref;
+  static const uint8_t phases[4][2] = {
+      {0, 0}, {0x10, 0xaf}, {0, 0}, {0x40, 0x48}};
+  for (int phase = 0; phase < 4; phase++) {
+    Pokey_Write(&ref, 0xd200, phases[phase][0]);
+    Pokey_Write(&fast, 0xd200, phases[phase][0]);
+    Pokey_Write(&ref, 0xd201, phases[phase][1]);
+    Pokey_Write(&fast, 0xd201, phases[phase][1]);
+    for (int chunk = 0; chunk < (phase == 2 ? 200 : 20); chunk++) {
+      int n = A800_AUDIO_BUFFER;
+      reference_advance(&ref, n);
+      Pokey_Clock(&fast, n);
+      Pokey_Flush(&fast);
+      same(&ref, &fast);
+      samples += ref.audio_len;
+      ref.audio_len = fast.audio_len = 0;
+    }
+    if (phase == 0)
+      check(fast.audio_filter == 0 && fast.audio_previous == 0);
+    if (phase == 2)
+      check(fast.audio_filter != 0);
   }
   printf("pokey_reference_test: %ld samples identical\n", samples);
   return 0;
