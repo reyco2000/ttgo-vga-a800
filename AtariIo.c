@@ -129,6 +129,32 @@ int AtariIo_LoadOs(Atari *a, const char *path) {
   free(data);
   return failed;
 }
+int AtariIo_LoadCartridge(Atari *a, const char *path) {
+  size_t size = 0;
+  uint8_t *data = load_alloc(path, &size);
+  if (!data)
+    return -1;
+  if (size >= 16 && !memcmp(data, "CART", 4)) {
+    uint32_t type = (uint32_t)data[4] << 24 | (uint32_t)data[5] << 16 |
+                    (uint32_t)data[6] << 8 | data[7];
+    size_t want = type == 1 ? 8192 : type == 2 ? 16384 : 0;
+    if (!want || size - 16 < want) {
+      free(data);
+      return want ? -1 : -2;
+    }
+    memmove(data, data + 16, want);
+    size = want;
+  }
+  if (size != 8192 && size != 16384) {
+    free(data);
+    return -1;
+  }
+  free(a->cart);
+  a->cart = data;
+  a->cart_size = (uint16_t)size;
+  Atari_InvalidateMemoryMap(a);
+  return 0;
+}
 int AtariIo_LoadDisk(Atari *a, const char *path) {
   FILE *f = fopen(path, "rb");
   long n;

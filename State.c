@@ -34,7 +34,7 @@ static uint32_t features(void) {
 
 int State_Save(const Atari *a, const char *path) {
   if (!a || !path || (a->disk_size && !a->disk) ||
-      (a->xex_size && !a->xex_data))
+      (a->xex_size && !a->xex_data) || a->cart)
     return -1;
   FILE *file = fopen(path, "wb");
   if (!file)
@@ -107,6 +107,9 @@ int State_Load(Atari *a, const char *path) {
   }
   free(a->disk);
   free(a->xex_data);
+  free(a->cart);
+  image.cart = NULL;
+  image.cart_size = 0;
   Atari_InvalidateMemoryMap(&image);
   image.line_sink = a->line_sink;
   image.line_defer = a->line_defer;

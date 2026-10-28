@@ -114,6 +114,9 @@ struct Atari {
   uint8_t *xex_data;
   size_t xex_size, xex_pos;
   uint16_t xex_first;
+  /* Standard 8/16 KB cartridge ending at $BFFF; malloc'd, owned here. */
+  uint8_t *cart;
+  uint16_t cart_size;
 };
 
 int Atari_Init(Atari *atari, const char *os_path, const char *basic_path);
@@ -126,6 +129,7 @@ uint8_t Atari_PortB(const Atari *atari);
 uint8_t Atari_Read(Atari *atari, uint16_t address);
 void Atari_Write(Atari *atari, uint16_t address, uint8_t value);
 void Atari_InvalidateMemoryMap(Atari *atari);
+void Atari_RemoveCartridge(Atari *atari);
 static inline uint8_t Atari_ReadFast(Atari *atari, uint16_t address) {
   const uint8_t *page = atari->read_map[address >> 8];
   return page ? page[address & 255] : Atari_Read(atari, address);

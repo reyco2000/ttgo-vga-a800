@@ -103,6 +103,8 @@ static const uint8_t *read_page(const Atari *a, uint16_t p) {
 #endif
   uint8_t portb = Atari_PortB(a);
   p &= 0xff00;
+  if (p < 0xc000 && p >= 0xc000 - a->cart_size)
+    return a->cart + (p - (0xc000 - a->cart_size));
   if (p >= 0xc000 && os_page_mapped(a, p) &&
       (a->machine_type != A800_MACHINE_XL || (portb & 1)))
     return a->os + (p - 0xc000);
@@ -122,6 +124,8 @@ static const uint8_t *read_page(const Atari *a, uint16_t p) {
 static uint8_t *write_page(Atari *a, uint16_t p) {
   uint8_t pb = Atari_PortB(a);
   p &= 0xff00;
+  if (p < 0xc000 && p >= 0xc000 - a->cart_size)
+    return NULL;
   if (p >= 0xc000 && os_page_mapped(a, p) &&
       (a->machine_type != A800_MACHINE_XL || (pb & 1)))
     return NULL;
@@ -232,7 +236,16 @@ A800_HOT void Atari_Frame(Atari *a) {
   Pokey_Flush(a);
   Gtia_Frame(a);
 }
+void Atari_RemoveCartridge(Atari *a) {
+  free(a->cart);
+  a->cart = NULL;
+  a->cart_size = 0;
+  Atari_InvalidateMemoryMap(a);
+}
 void Atari_Destroy(Atari *a) {
+  free(a->cart);
+  a->cart = NULL;
+  a->cart_size = 0;
   free(a->disk);
   free(a->xex_data);
   a->disk = a->xex_data = NULL;
