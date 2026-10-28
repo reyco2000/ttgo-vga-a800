@@ -23,6 +23,7 @@ void Osd_Rect(int x, int y, int w, int h, uint8_t colour);
 void Osd_Frame(int x, int y, int w, int h, uint8_t colour);
 void Osd_Text(int x, int y, const char *s, uint8_t fg, uint8_t bg);
 int Osd_TextCols(void); /* characters per screen row */
-void Osd_Icon(int x, int y, OsdIcon icon, uint8_t fg); /* about 32x24 */
+/* About 32x24; bg is the tile colour, used for the icon's cut-outs. */
+void Osd_Icon(int x, int y, OsdIcon icon, uint8_t fg, uint8_t bg);
 
 #endif

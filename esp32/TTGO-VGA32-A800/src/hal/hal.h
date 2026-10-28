@@ -23,10 +23,13 @@ int Audio_Fill(void);
 void Audio_Push(const int16_t *samples, int count);
 uint32_t Audio_Underruns(void);
 
-/* PS/2 keyboard. Returns KEY_ACTION_* for keys the frontend handles. */
-enum { KEY_ACTION_NONE = 0, KEY_ACTION_RESET = 1 };
+/* PS/2 keyboard. Returns KEY_ACTION_* for keys the frontend handles; while
+ * the supervisor is open every event goes to Supervisor_Key instead. */
+enum { KEY_ACTION_NONE = 0, KEY_ACTION_RESET = 1, KEY_ACTION_SUPERVISOR = 2 };
 void Keyboard_Init(void);
 int Keyboard_Poll(Atari *a);
+/* Releases whatever the Atari sees held: key, joystick, trigger, console. */
+void Keyboard_ReleaseAll(Atari *a);
 
 /* microSD mounted at /sd for the core's stdio file loading. */
 bool Storage_Init(void);

@@ -5,6 +5,7 @@
 #include "src/hal/hal.h"
 #include "src/ui/osd.h"
 #include "src/ui/settings.h"
+#include "src/ui/supervisor.h"
 extern "C" {
 #include "src/core/6502.h"
 #include "src/core/Antic.h"
@@ -18,9 +19,16 @@ enum { AUDIO_TARGET = 2 * AUDIO_RATE / 60 };
 /* The ~94 KB machine comes from the internal heap before FabGL takes its
  * framebuffer; static DRAM is too small to hold it. */
 static Atari *atari;
+static Settings cfg; /* running configuration, edited by the supervisor */
+static OsChoice booted_os;
 static char media[128];
-static const char *xex;
+/* The mounted XEX is kept in RAM: its deferred load runs after the SD card
+ * has been unmounted. */
+static uint8_t *xex_image;
+static size_t xex_image_size;
+static bool xex_armed;
 static int use_basic, option_boot_frames, boot_frames;
+static float last_fps;
 
 static void halt(const char *message) {
   Serial.printf("a800: %s\n", message);
@@ -45,10 +53,86 @@ static bool file_exists(const char *path) {
   return f != NULL;
 }
 
+/* Reads an XEX into xex_image (PSRAM for anything sizeable). */
+static bool read_xex(const char *path) {
+  FILE *f = fopen(path, "rb");
+  long n = -1;
+  uint8_t *data = NULL;
+  if (f && !fseek(f, 0, SEEK_END) && (n = ftell(f)) >= 6 && !fseek(f, 0, SEEK_SET))
+    data = (uint8_t *)malloc((size_t)n);
+  bool ok = data && fread(data, 1, (size_t)n, f) == (size_t)n;
+  if (f)
+    fclose(f);
+  if (!ok) {
+    free(data);
+    return false;
+  }
+  free(xex_image);
+  xex_image = data;
+  xex_image_size = (size_t)n;
+  return true;
+}
+
+/* The F5 reset: cold start keeping cartridge and disk, OPTION held when
+ * BASIC is off, and the mounted XEX loaded again after the boot frames. */
+void Host_ColdReset(void) {
+  Atari_Reset(atari);
+  Pokey_Audio(atari, NULL, 0, AUDIO_RATE); /* Atari_Reset clears the rate */
+  boot_without_basic();
+  xex_armed = xex_image != NULL;
+  boot_frames = 0;
+}
+
+void Host_Eject(void) {
+  Atari_EjectDisk(atari);
+  free(xex_image);
+  xex_image = NULL;
+  xex_image_size = 0;
+  xex_armed = false;
+  media[0] = 0;
+}
+
+int Host_Mount(const char *path) {
+  if (is_xex(path)) {
+    if (!read_xex(path))
+      return -1;
+    Atari_EjectDisk(atari);
+  } else {
+    if (Atari_LoadDisk(atari, path))
+      return -1;
+    free(xex_image);
+    xex_image = NULL;
+    xex_image_size = 0;
+  }
+  snprintf(media, sizeof(media), "%s", path);
+  Host_ColdReset();
+  return 0;
+}
+
+const char *Host_Media(void) { return media; }
+
+/* "" removes the cartridge; BASIC then goes back in on an 800 OS. */
+int Host_Cart(const char *path) {
+  if (path[0])
+    return AtariIo_LoadCartridge(atari, path);
+  Atari_RemoveCartridge(atari);
+  if (atari->machine_type == A800_MACHINE_800 && use_basic &&
+      AtariIo_LoadCartridge(atari, BASIC_ROM)) {
+    Serial.printf("a800: cannot load " BASIC_ROM ", BASIC off\n");
+    use_basic = 0;
+  }
+  return 0;
+}
+
+OsChoice Host_BootedOs(void) { return booted_os; }
+bool Host_Basic(void) { return use_basic; }
+float Host_Fps(void) { return last_fps; }
+
 /* Builds the machine from the settings, with the SD card mounted: OS and
  * BASIC, video standard, cartridge, media, then the VGA output (started
- * once, here). A game cartridge wins over BASIC as a cartridge. */
-static void boot_machine(const Settings *s) {
+ * once, here). A game cartridge wins over BASIC as a cartridge. A cartridge
+ * that fails to load is dropped from s, the running configuration. */
+static void boot_machine(Settings *s) {
   OsChoice os = s->os;
   bool xl = os == OS_XL;
   use_basic = s->basic;
@@ -71,26 +155,28 @@ static void boot_machine(const Settings *s) {
     halt("ROM load failed");
   }
   Atari_SetVideoStandard(atari, s->pal ? A800_PAL : A800_NTSC);
-  if (s->cart[0]) {
-    if (AtariIo_LoadCartridge(atari, s->cart))
-      Serial.printf("a800: warning: cannot load cartridge %s\n", s->cart);
-    else
-      Serial.printf("a800: cartridge %s\n", s->cart);
-  } else if (!xl && use_basic) {
-    if (AtariIo_LoadCartridge(atari, BASIC_ROM)) {
-      Serial.printf("a800: cannot load " BASIC_ROM ", booting without BASIC\n");
-      use_basic = 0;
-    }
+  booted_os = os;
+  if (s->cart[0] && AtariIo_LoadCartridge(atari, s->cart)) {
+    Serial.printf("a800: warning: cannot load cartridge %s\n", s->cart);
+    s->cart[0] = 0;
+  } else if (s->cart[0]) {
+    Serial.printf("a800: cartridge %s\n", s->cart);
+  }
+  if (!s->cart[0] && !xl && use_basic &&
+      AtariIo_LoadCartridge(atari, BASIC_ROM)) {
+    Serial.printf("a800: cannot load " BASIC_ROM ", booting without BASIC\n");
+    use_basic = 0;
   }
   boot_without_basic();
   char autorun[128] = "";
   Storage_ReadAutorun(autorun, sizeof(autorun));
   Settings_ChooseMedia(s, file_exists, autorun, media, sizeof(media));
   if (media[0]) {
-    if (is_xex(media))
-      xex = media;
-    else if (Atari_LoadDisk(atari, media))
+    if (is_xex(media) ? !read_xex(media) : Atari_LoadDisk(atari, media) != 0) {
       Serial.printf("a800: warning: cannot mount %s\n", media);
+      media[0] = 0;
+    }
+    xex_armed = xex_image != NULL;
     Serial.printf("a800: media %s\n", media);
   }
   Serial.printf("a800: %s %s, BASIC %s\n", Atari_MachineName(atari),
@@ -182,7 +268,6 @@ void setup() {
                   (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
     halt("cannot allocate the machine");
   }
-  Settings cfg;
   Settings_Load(&cfg);
   if (!Storage_Init())
     halt("cannot mount microSD");
@@ -200,7 +285,7 @@ void setup() {
     Osd_Text(8, 52, " SELECTED ", OSD_SEL_FG, OSD_SEL_BG);
     for (int i = 0; i < 6; i++) {
       Osd_Rect(16 + i * 52, 96, 44, 40, OSD_TILE);
-      Osd_Icon(22 + i * 52, 104, (OsdIcon)i, OSD_FG);
+      Osd_Icon(22 + i * 52, 104, (OsdIcon)i, OSD_FG, OSD_TILE);
     }
     Serial.printf("osd: heap after %u\n",
                   (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
@@ -227,18 +312,33 @@ static void run_frame(void) {
   static int16_t samples[512];
   static uint32_t stats_start, stats_frames, stats_underruns, stats_drawer;
   static int64_t emulated_us;
-  if (Keyboard_Poll(atari) & KEY_ACTION_RESET) {
-    Atari_Reset(atari);
-    boot_without_basic();
+  int keys = Keyboard_Poll(atari); /* goes to the menu while it is open */
+  if (keys & KEY_ACTION_SUPERVISOR)
+    Supervisor_Open(atari, &cfg);
+  if (Supervisor_Active()) {
+    Supervisor_Update();
+    vTaskDelay(1);
+    if (!Supervisor_Active()) {
+      /* Closed: the ring drained while paused, so restart the statistics
+       * (underruns) and let pacing refill it from empty. */
+      stats_start = millis();
+      stats_frames = 0;
+      stats_underruns = Audio_Underruns();
+      stats_drawer = Video_DrawerBusyUs();
+      emulated_us = 0;
+    }
+    return;
   }
+  if (keys & KEY_ACTION_RESET)
+    Host_ColdReset();
   int64_t start = esp_timer_get_time();
   Atari_Frame(atari);
   if (option_boot_frames && !--option_boot_frames)
     atari->console |= 4;
-  if (xex && ++boot_frames == A800_XEX_BOOT_FRAMES) {
-    if (Atari_LoadExecutable(atari, xex))
-      Serial.printf("a800: cannot load executable %s\n", xex);
-    xex = NULL;
+  if (xex_armed && ++boot_frames == A800_XEX_BOOT_FRAMES) {
+    if (Atari_LoadExecutableData(atari, xex_image, xex_image_size))
+      Serial.printf("a800: cannot load executable %s\n", media);
+    xex_armed = false;
   }
   emulated_us += esp_timer_get_time() - start;
   while (atari->audio_len) {
@@ -252,9 +352,9 @@ static void run_frame(void) {
   uint32_t now = millis();
   if (now - stats_start >= STATS_PERIOD_MS) {
     uint32_t underruns = Audio_Underruns(), drawer = Video_DrawerBusyUs();
+    last_fps = stats_frames * 1000.0f / (now - stats_start);
     Serial.printf("a800: %.1f fps, %.2f ms/frame emulated, %u underruns, "
-                  "core 1 drawing %.0f%%\n",
-                  stats_frames * 1000.0f / (now - stats_start),
+                  "core 1 drawing %.0f%%\n", last_fps,
                   emulated_us / 1000.0f / stats_frames,
                   (unsigned)(underruns - stats_underruns),
                   (drawer - stats_drawer) / 10.0f / (now - stats_start));

@@ -88,12 +88,12 @@ static void ring(int cx, int cy, int r, uint8_t colour) {
   }
 }
 
-void Osd_Icon(int x, int y, OsdIcon icon, uint8_t fg) {
+void Osd_Icon(int x, int y, OsdIcon icon, uint8_t fg, uint8_t bg) {
   switch (icon) {
   case ICON_DISK: /* floppy: body, shutter, label */
     Osd_Frame(x + 4, y, 24, 24, fg);
     Osd_Rect(x + 9, y, 14, 8, fg);
-    Osd_Rect(x + 17, y + 1, 3, 6, OSD_TILE);
+    Osd_Rect(x + 17, y + 1, 3, 6, bg);
     Osd_Frame(x + 8, y + 12, 16, 12, fg);
     break;
   case ICON_CART: /* cartridge: body with notch and contacts */
@@ -102,12 +102,12 @@ void Osd_Icon(int x, int y, OsdIcon icon, uint8_t fg) {
     Osd_Rect(x + 8, y + 12, 16, 2, fg);
     Osd_Rect(x + 8, y + 18, 16, 5, fg);
     for (int i = 0; i < 5; i++)
-      Osd_Rect(x + 9 + i * 3, y + 19, 1, 4, OSD_TILE);
+      Osd_Rect(x + 9 + i * 3, y + 19, 1, 4, bg);
     break;
   case ICON_RESET: /* circular arrow */
     ring(x + 16, y + 12, 10, fg);
     ring(x + 16, y + 12, 9, fg);
-    Osd_Rect(x + 16, y + 1, 12, 8, OSD_TILE); /* gap at upper right */
+    Osd_Rect(x + 16, y + 1, 12, 8, bg);       /* gap at upper right */
     Osd_Rect(x + 16, y + 3, 11, 2, fg);       /* arrow head */
     line(x + 27, y + 4, x + 22, y, fg);
     line(x + 27, y + 4, x + 22, y + 8, fg);

@@ -5,7 +5,7 @@
 #ifndef A800_ESP32_CONFIG_H
 #define A800_ESP32_CONFIG_H
 
-#define FIRMWARE_VERSION "0.1.0"
+#define FIRMWARE_VERSION "0.2.0"
 
 /* VGA resistor DAC, 2 bits per channel (FabGL's TTGO defaults). */
 #define PIN_VGA_R0 21

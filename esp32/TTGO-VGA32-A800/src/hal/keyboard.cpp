@@ -1,9 +1,10 @@
 /* PS/2 keyboard through FabGL. Bindings follow the SDL frontend: arrows and
  * Alt are joystick 0, F2/F3/F4 are OPTION/SELECT/START, F5 resets and F8 is
- * BREAK. Typing uses FabGL's layout-translated ASCII, so the codes below are
+ * BREAK, F12 opens the supervisor. Typing uses FabGL's layout-translated ASCII, so the codes below are
  * the SDL frontend's US-layout codes indexed by character. */
 #include "fabgl.h"
 #include "hal.h"
+#include "../ui/supervisor.h"
 extern "C" {
 #include "../core/Pokey.h"
 }
@@ -122,11 +123,28 @@ void Keyboard_Init(void) {
   ps2.begin(fabgl::PS2Preset::KeyboardPort0, fabgl::KbdMode::CreateVirtualKeysQueue);
 }
 
+/* F12 down stops the poll, so the keys after it reach the menu once it is
+ * open. Its key-up is ignored. */
 int Keyboard_Poll(Atari *a) {
   fabgl::Keyboard *kbd = fabgl::PS2Controller::keyboard();
   int action = KEY_ACTION_NONE;
   fabgl::VirtualKeyItem k;
-  while (kbd && kbd->virtualKeyAvailable() > 0 && kbd->getNextVirtualKey(&k, 0))
-    action |= key_event(a, k);
+  while (kbd && kbd->virtualKeyAvailable() > 0 && kbd->getNextVirtualKey(&k, 0)) {
+    if (Supervisor_Active())
+      Supervisor_Key(k.vk, (uint8_t)k.ASCII, k.down);
+    else if (k.vk == fabgl::VK_F12) {
+      if (k.down)
+        return action | KEY_ACTION_SUPERVISOR;
+    } else
+      action |= key_event(a, k);
+  }
   return action;
+}
+
+void Keyboard_ReleaseAll(Atari *a) {
+  if (!(a->pokey_skstat & 4))
+    Pokey_KeyEvent(a, a->keycode, 0);
+  a->joystick = 0xff;
+  a->trigger[0] = 1;
+  a->console = 7;
 }
