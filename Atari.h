@@ -123,6 +123,7 @@ int Atari_Init(Atari *atari, const char *os_path, const char *basic_path);
 void Atari_SetVideoStandard(Atari *atari, AtariVideoStandard standard);
 const char *Atari_MachineName(const Atari *atari);
 void Atari_Reset(Atari *atari);
+void Atari_WarmReset(Atari *atari);
 void Atari_Frame(Atari *atari);
 void Atari_Destroy(Atari *atari);
 uint8_t Atari_PortB(const Atari *atari);

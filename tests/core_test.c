@@ -655,5 +655,17 @@ int main(void) {
   assert(remove("core_test.state") == 0);
 #endif
   Atari_Destroy(&timed);
+  Atari warm;
+  memset(&warm, 0, sizeof(warm));
+  warm.antic[15] = 0xc0;
+  warm.ram[0x600] = 0x77;
+  warm.ram[0xfffa] = 0x34;
+  warm.ram[0xfffb] = 0x12;
+  Atari_WarmReset(&warm);
+  assert(warm.nmi == 1);
+  assert((Atari_Read(&warm, 0xd40f) & 0xe0) == 0x20);
+  assert(warm.ram[0x600] == 0x77);
+  Cpu_Step(&warm);
+  assert(warm.pc == 0x1234);
   return 0;
 }

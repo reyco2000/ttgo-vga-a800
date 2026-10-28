@@ -87,6 +87,10 @@ void Atari_Reset(Atari *a) {
   a->cpu_cycle_debt = a->irq = a->nmi = 0;
   Cpu_Reset(a);
 }
+void Atari_WarmReset(Atari *a) {
+  a->antic[15] = (uint8_t)((a->antic[15] & 0x1f) | 0x20);
+  a->nmi = 1;
+}
 static int is_io(const Atari *a, uint16_t p) {
   if (a->machine_type == A800_MACHINE_5200)
     return (p >= 0xc000 && p < 0xd000) || (p >= 0xd400 && p < 0xd500) ||
