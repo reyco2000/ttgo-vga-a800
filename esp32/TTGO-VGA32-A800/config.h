@@ -17,9 +17,17 @@
 #define PIN_VGA_HSYNC 23
 #define PIN_VGA_VSYNC 15
 
-/* PS/2 keyboard on port 0 (CLK 33, DATA 32); port 1 (26/27) is unused. */
+/* PS/2 keyboard on port 0 (CLK 33, DATA 32), mouse on port 1 (CLK 26,
+ * DATA 27) as joystick 0. */
 #define PIN_PS2_KBD_CLK 33
 #define PIN_PS2_KBD_DATA 32
+#define PIN_PS2_MOUSE_CLK 26
+#define PIN_PS2_MOUSE_DATA 27
+
+/* Mouse joystick: counts of motion that push the stick, and the most the
+ * stick holds (larger = lets go later after the mouse stops). */
+#define MOUSE_JOY_THRESHOLD 4
+#define MOUSE_JOY_RANGE 24
 
 /* Internal DAC1. */
 #define PIN_DAC_OUT 25
@@ -55,6 +63,7 @@
 #define USE_BASIC 1     /* 1 = enable BASIC when BASIC_ROM is present */
 #define USE_PAL 0       /* 1 = PAL timing (50 Hz emulation on 60 Hz VGA) */
 #define KBD_LAYOUT 0    /* 0 US, 1 Latam Spanish, 2 Italian, 3 Brazilian ABNT2 */
+#define MOUSE_SWAP 0    /* 1 = left-handed mouse: right button fires */
 #define STATS_PERIOD_MS 2000
 #define TEST_PATTERN_MS 2000 /* colour bars shown at boot; 0 = none */
 #define OSD_SELFTEST 0 /* 1 = draw the OSD test screen for 3 s at boot */

@@ -47,6 +47,7 @@ void Settings_Load(Settings *s) {
   s->basic = USE_BASIC;
   s->pal = USE_PAL;
   s->kbd = (KbdChoice)KBD_LAYOUT;
+  s->mouse_swap = MOUSE_SWAP;
   if (!p.begin("a800", true))
     return; /* namespace never written: first boot */
   uint8_t os = p.getUChar("os", OS_XL);
@@ -57,6 +58,7 @@ void Settings_Load(Settings *s) {
   uint8_t kbd = p.getUChar("kbd", KBD_LAYOUT);
   if (kbd < KBD_COUNT)
     s->kbd = (KbdChoice)kbd;
+  s->mouse_swap = p.getBool("mswap", MOUSE_SWAP);
   load_path(p, "disk", s->disk, sizeof s->disk);
   load_path(p, "cart", s->cart, sizeof s->cart);
   p.end();
@@ -70,6 +72,7 @@ void Settings_Save(const Settings *s) {
   p.putBool("basic", s->basic);
   p.putBool("pal", s->pal);
   p.putUChar("kbd", s->kbd);
+  p.putBool("mswap", s->mouse_swap);
   p.putString("disk", s->disk);
   p.putString("cart", s->cart);
   p.end();
