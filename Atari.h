@@ -144,6 +144,7 @@ static inline void Atari_WriteFast(Atari *atari, uint16_t address,
     Atari_Write(atari, address, value);
 }
 int Atari_LoadDisk(Atari *atari, const char *path);
+void Atari_EjectDisk(Atari *atari); /* frees the image; safe when empty */
 int Atari_LoadExecutable(Atari *atari, const char *path);
 int Atari_Sector(Atari *atari, unsigned sector, uint8_t *data, int write);
 

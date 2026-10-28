@@ -135,9 +135,30 @@ static void test_cartridges(void) {
   remove("core_test_cart.car");
   remove("core_test_bad.rom");
 }
+static void test_disk_eject(void) {
+  static uint8_t atr[16 + 3 * 128];
+  Atari a;
+  memset(&a, 0, sizeof(a));
+  atr[0] = 0x96;
+  atr[1] = 0x02;
+  atr[4] = 128;
+  atr[16] = 0x5a;
+  write_file("core_test_disk.atr", atr, sizeof(atr));
+  assert(Atari_LoadDisk(&a, "core_test_disk.atr") == 0);
+  assert(a.disk && a.disk_size == sizeof(atr));
+  uint8_t sector[128];
+  assert(Atari_Sector(&a, 1, sector, 0) == 128 && sector[0] == 0x5a);
+  Atari_EjectDisk(&a);
+  assert(!a.disk && a.disk_size == 0);
+  assert(Atari_Sector(&a, 1, sector, 0) == -1);
+  Atari_EjectDisk(&a);
+  assert(!a.disk && a.disk_size == 0);
+  remove("core_test_disk.atr");
+}
 int main(void) {
   test_rom_xex();
   test_cartridges();
+  test_disk_eject();
   Atari a;
   memset(&a, 0, sizeof(a));
   a.s = 0xfd;

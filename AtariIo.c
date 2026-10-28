@@ -231,6 +231,11 @@ uint8_t AtariIo_Sio(Atari *a) {
 int Atari_LoadDisk(Atari *a, const char *path) {
   return AtariIo_LoadDisk(a, path);
 }
+void Atari_EjectDisk(Atari *a) {
+  free(a->disk);
+  a->disk = NULL;
+  a->disk_size = 0;
+}
 int Atari_Sector(Atari *a, unsigned s, uint8_t *d, int w) {
   return AtariIo_Sector(a, s, d, w);
 }
