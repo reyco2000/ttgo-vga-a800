@@ -5,14 +5,15 @@
 #define BROWSER_MAX 256
 
 struct BrowserEntry {
-  char name[64];
+  char name[256];  /* full name (FAT max 255) */
   bool dir;
 };
 
+/* A Browser must be zero-initialised with root set before the first Open. */
 struct Browser {
   BrowserEntry *entries;
   int count;
-  bool truncated;  /* a name was cut to 63 bytes */
+  bool capped;     /* more than BROWSER_MAX matches existed */
   char path[128];
   char root[128];  /* set by caller; ".." is offered only below it ("" = never) */
 };

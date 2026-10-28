@@ -49,6 +49,7 @@ static void browser_filters_and_sorts() {
   Browser b; init(&b);
   CHECK(Browser_Open(&b, root, EXTS) == 0);
   CHECK(b.count == 4);
+  CHECK(!b.capped);
   CHECK(!strcmp(b.entries[0].name, "Games") && b.entries[0].dir);
   CHECK(!strcmp(b.entries[1].name, "a.atr") && !b.entries[1].dir);
   CHECK(!strcmp(b.entries[2].name, "b.ATR"));
@@ -96,11 +97,12 @@ static void browser_caps_entries() {
   Browser b; init(&b);
   CHECK(Browser_Open(&b, root, EXTS) == 0);
   CHECK(b.count == 256);
+  CHECK(b.capped);
   Browser_Close(&b);
   teardown();
 }
 
-static void browser_truncates_names() {
+static void browser_long_name_opens() {
   setup();
   char n[128];
   memset(n, 'a', 96);
@@ -109,9 +111,42 @@ static void browser_truncates_names() {
   Browser b; init(&b);
   CHECK(Browser_Open(&b, root, EXTS) == 0);
   CHECK(b.count == 1);
-  CHECK(strlen(b.entries[0].name) == 63);
-  CHECK(b.entries[0].name[63] == 0);
-  CHECK(b.truncated);
+  CHECK(!strcmp(b.entries[0].name, n));
+  char full[400];
+  Browser_FullPath(&b, 0, full, sizeof full);
+  FILE *f = fopen(full, "r");
+  CHECK(f);
+  fclose(f);
+  Browser_Close(&b);
+  teardown();
+}
+
+static void browser_failed_enter_keeps_listing() {
+  setup();
+  mkd(root, "Games"); mkd(root, "Gone"); touch(root, "a.atr");
+  Browser b; init(&b);
+  CHECK(Browser_Open(&b, root, EXTS) == 0);
+  CHECK(b.count == 3);
+  char gone[300]; snprintf(gone, sizeof gone, "%s/Gone", root);
+  CHECK(rmdir(gone) == 0);
+  CHECK(!strcmp(b.entries[1].name, "Gone"));
+  CHECK(Browser_Enter(&b, 1, EXTS) == -1);
+  CHECK(b.count == 3 && b.entries);
+  CHECK(!strcmp(b.path, root));
+  CHECK(!strcmp(b.entries[0].name, "Games") && !strcmp(b.entries[2].name, "a.atr"));
+  Browser_Close(&b);
+  teardown();
+}
+
+static void browser_refresh() {
+  setup();
+  touch(root, "a.atr");
+  Browser b; init(&b);
+  CHECK(Browser_Open(&b, root, EXTS) == 0);
+  CHECK(b.count == 1);
+  touch(root, "b.atr");
+  CHECK(Browser_Open(&b, b.path, EXTS) == 0);
+  CHECK(b.count == 2 && !strcmp(b.path, root));
   Browser_Close(&b);
   teardown();
 }
@@ -128,7 +163,9 @@ int main() {
   browser_dotdot_below_root();
   browser_empty_root_no_dotdot();
   browser_caps_entries();
-  browser_truncates_names();
+  browser_long_name_opens();
+  browser_failed_enter_keeps_listing();
+  browser_refresh();
   browser_missing_dir();
   printf("browser_test: all passed\n");
   return 0;

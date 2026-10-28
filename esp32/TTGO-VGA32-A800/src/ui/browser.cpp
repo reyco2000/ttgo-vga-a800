@@ -23,7 +23,8 @@ static int cmp(const void *pa, const void *pb) {
   bool da = !strcmp(a->name, ".."), db = !strcmp(b->name, "..");
   if (da != db) return da ? -1 : 1;
   if (a->dir != b->dir) return a->dir ? -1 : 1;
-  return strcasecmp(a->name, b->name);
+  int r = strcasecmp(a->name, b->name);
+  return r ? r : strcmp(a->name, b->name);
 }
 
 /* True when path is strictly below a non-empty root. */
@@ -33,43 +34,55 @@ static bool below_root(const Browser *b) {
   return b->root[r - 1] == '/' || b->path[r] == '/';
 }
 
+/* Builds the new listing first and swaps it in only on success, so a failure
+ * leaves the current listing intact. path may alias b->path (refresh). */
 int Browser_Open(Browser *b, const char *path, const char *const *exts) {
-  char root[sizeof b->root];
-  memcpy(root, b->root, sizeof root);  /* caller-owned, survives re-open */
-  Browser_Close(b);
-  memcpy(b->root, root, sizeof root);
-  DIR *d = opendir(path);
+  char np[sizeof b->path];
+  if (snprintf(np, sizeof np, "%s", path) >= (int)sizeof np) return -1;
+  size_t pl = strlen(np);
+  while (pl > 1 && np[pl - 1] == '/') np[--pl] = 0;
+  DIR *d = opendir(np);
   if (!d) return -1;
-  b->entries = (BrowserEntry *)malloc(BROWSER_MAX * sizeof(BrowserEntry));
-  if (!b->entries) { closedir(d); return -1; }
-  snprintf(b->path, sizeof b->path, "%s", path);
-  size_t pl = strlen(b->path);
-  while (pl > 1 && b->path[pl - 1] == '/') b->path[--pl] = 0;
+  BrowserEntry *ent = (BrowserEntry *)malloc(BROWSER_MAX * sizeof(BrowserEntry));
+  if (!ent) { closedir(d); return -1; }
 
-  if (below_root(b)) {
-    strcpy(b->entries[0].name, "..");
-    b->entries[0].dir = true;
-    b->count = 1;
+  Browser nb = *b;
+  memcpy(nb.path, np, sizeof np);
+  nb.entries = ent;
+  nb.count = 0;
+  nb.capped = false;
+  if (below_root(&nb)) {
+    strcpy(ent[0].name, "..");
+    ent[0].dir = true;
+    nb.count = 1;
   }
-  while (b->count < BROWSER_MAX) {
-    struct dirent *de = readdir(d);
-    if (!de) break;
+  struct dirent *de;
+  while ((de = readdir(d)) != NULL) {
     if (de->d_name[0] == '.') continue;
-    char full[sizeof b->path + sizeof de->d_name + 2];
-    snprintf(full, sizeof full, "%s/%s", b->path, de->d_name);
-    struct stat st;
-    if (stat(full, &st)) continue;
-    bool dir = S_ISDIR(st.st_mode);
-    if (!dir && (!S_ISREG(st.st_mode) || !ext_ok(de->d_name, exts))) continue;
-    BrowserEntry *e = &b->entries[b->count++];
+    bool dir;
+    if (de->d_type == DT_DIR) dir = true;
+    else if (de->d_type == DT_REG) dir = false;
+    else {  /* DT_UNKNOWN, symlinks: ask the filesystem */
+      char full[sizeof nb.path + sizeof de->d_name + 2];
+      snprintf(full, sizeof full, "%s/%s", nb.path, de->d_name);
+      struct stat st;
+      if (stat(full, &st)) continue;
+      if (S_ISDIR(st.st_mode)) dir = true;
+      else if (S_ISREG(st.st_mode)) dir = false;
+      else continue;
+    }
+    if (!dir && !ext_ok(de->d_name, exts)) continue;
     size_t n = strlen(de->d_name);
-    if (n > sizeof e->name - 1) { n = sizeof e->name - 1; b->truncated = true; }
-    memcpy(e->name, de->d_name, n);
-    e->name[n] = 0;
+    if (n >= sizeof ent[0].name) continue;
+    if (nb.count >= BROWSER_MAX) { nb.capped = true; break; }
+    BrowserEntry *e = &ent[nb.count++];
+    memcpy(e->name, de->d_name, n + 1);
     e->dir = dir;
   }
   closedir(d);
-  qsort(b->entries, b->count, sizeof(BrowserEntry), cmp);
+  qsort(ent, nb.count, sizeof(BrowserEntry), cmp);
+  free(b->entries);
+  *b = nb;
   return 0;
 }
 
@@ -77,7 +90,7 @@ void Browser_Close(Browser *b) {
   free(b->entries);
   b->entries = NULL;
   b->count = 0;
-  b->truncated = false;
+  b->capped = false;
   b->path[0] = 0;
 }
 
