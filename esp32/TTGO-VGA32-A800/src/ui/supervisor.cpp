@@ -88,9 +88,14 @@ static void ask(Action yes) {
   sv.pop_sel = 0; /* NO */
 }
 
-static void save_path(char *field, const char *path) {
-  snprintf(field, sizeof(sv.s->disk), "%s", path);
-  Settings_Save(sv.s);
+/* Every save records both running slots: disk = the mounted media ("" when
+ * none), cart = the inserted game cartridge ("" when none). */
+static void save_slots(const char *cart) {
+  Settings *s = sv.s;
+  snprintf(s->disk, sizeof s->disk, "%s", Host_Media());
+  if (cart != s->cart)
+    snprintf(s->cart, sizeof s->cart, "%s", cart);
+  Settings_Save(s);
 }
 
 static int nav(int vk) {
@@ -322,12 +327,12 @@ static void apply(Action act) {
       message("CANNOT LOAD FILE");
       break;
     }
-    save_path(s->disk, sv.path);
+    save_slots(s->cart);
     close_menu();
     break;
   case ACT_EJECT:
     Host_Eject();
-    save_path(s->disk, "");
+    save_slots(s->cart);
     break;
   case ACT_CART:
     r = Host_Cart(sv.path);
@@ -335,13 +340,13 @@ static void apply(Action act) {
       message(r == -2 ? "CARTRIDGE TYPE NOT SUPPORTED" : "CANNOT LOAD FILE");
       break;
     }
-    save_path(s->cart, sv.path);
+    save_slots(sv.path);
     Host_ColdReset();
     close_menu();
     break;
   case ACT_CART_REMOVE:
     Host_Cart("");
-    save_path(s->cart, "");
+    save_slots("");
     Host_ColdReset();
     close_menu();
     break;
