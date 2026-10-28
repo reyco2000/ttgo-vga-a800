@@ -44,11 +44,18 @@ static void os_path_values() {
   CHECK(!strcmp(Settings_OsPath(OS_800A), "/sd/atari/roms/ATARIOSA.ROM"));
 }
 
+static void kbd_names() {
+  CHECK(!strcmp(Settings_KbdName(KBD_US), "US English"));
+  CHECK(!strcmp(Settings_KbdName(KBD_BRAZIL), "Portuguese BR"));
+  CHECK(!strcmp(Settings_KbdName(KBD_COUNT), "US English")); /* bad NVS */
+}
+
 int main() {
   choose_media_prefers_nvs();
   choose_media_skips_missing_nvs();
   choose_media_none();
   os_path_values();
+  kbd_names();
   printf("settings_test OK\n");
   return 0;
 }

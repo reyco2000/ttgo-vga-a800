@@ -1,15 +1,127 @@
 /* PS/2 keyboard through FabGL. Bindings follow the SDL frontend: arrows and
  * Alt are joystick 0, F2/F3/F4 are OPTION/SELECT/START, F5 resets and F8 is
  * BREAK, F12 opens the supervisor. Typing uses FabGL's layout-translated ASCII, so the codes below are
- * the SDL frontend's US-layout codes indexed by character. */
+ * the SDL frontend's US-layout codes indexed by character, whichever PS/2
+ * layout Setup picked. */
 #include "fabgl.h"
 #include "hal.h"
+#include "../ui/settings.h"
 #include "../ui/supervisor.h"
 extern "C" {
 #include "../core/Pokey.h"
 }
 
 static fabgl::PS2Controller ps2;
+static bool altgr; /* right Alt is AltGr, so only left Alt fires */
+
+/* Layouts from the classic99 port. FabGL reads dead-key tables from the
+ * active layout only, so each one leaves them empty: accents are typed
+ * directly instead of swallowing the next key. */
+using namespace fabgl;
+
+/* Latin America */
+static const KeyboardLayout LatamLayout = {
+    "LA", "Spanish (Latam)", &USLayout,
+    {
+        {0x0E, VK_VERTICALBAR},
+        {0x4E, VK_QUOTE},
+        {0x55, VK_QUESTION_INV},
+        {0x54, VK_ACUTEACCENT},
+        {0x5B, VK_PLUS},
+        {0x4C, VK_TILDE_n},
+        {0x52, VK_LEFTBRACE},
+        {0x5D, VK_RIGHTBRACE},
+        {0x61, VK_LESS},
+        {0x4A, VK_MINUS},
+    },
+    {},
+    /* in_key, { CTRL, LALT, RALT, SHIFT }, out_key */
+    {
+        {VK_VERTICALBAR, {0, 0, 0, 1}, VK_DEGREE},
+        {VK_VERTICALBAR, {0, 0, 1, 0}, VK_NEGATION},
+        {VK_2, {0, 0, 0, 1}, VK_QUOTEDBL},
+        {VK_6, {0, 0, 0, 1}, VK_AMPERSAND},
+        {VK_7, {0, 0, 0, 1}, VK_SLASH},
+        {VK_8, {0, 0, 0, 1}, VK_LEFTPAREN},
+        {VK_9, {0, 0, 0, 1}, VK_RIGHTPAREN},
+        {VK_0, {0, 0, 0, 1}, VK_EQUALS},
+        {VK_QUOTE, {0, 0, 0, 1}, VK_QUESTION},
+        {VK_QUOTE, {0, 0, 1, 0}, VK_BACKSLASH},
+        {VK_QUESTION_INV, {0, 0, 0, 1}, VK_EXCLAIM_INV},
+        {VK_q, {0, 0, 1, 0}, VK_AT},
+        {VK_ACUTEACCENT, {0, 0, 0, 1}, VK_DIAERESIS},
+        {VK_PLUS, {0, 0, 0, 1}, VK_ASTERISK},
+        {VK_PLUS, {0, 0, 1, 0}, VK_TILDE},
+        {VK_TILDE_n, {0, 0, 0, 1}, VK_TILDE_N},
+        {VK_LEFTBRACE, {0, 0, 0, 1}, VK_LEFTBRACKET},
+        {VK_LEFTBRACE, {0, 0, 1, 0}, VK_CARET},
+        {VK_RIGHTBRACE, {0, 0, 0, 1}, VK_RIGHTBRACKET},
+        {VK_RIGHTBRACE, {0, 0, 1, 0}, VK_GRAVEACCENT},
+        {VK_LESS, {0, 0, 0, 1}, VK_GREATER},
+        {VK_COMMA, {0, 0, 0, 1}, VK_SEMICOLON},
+        {VK_PERIOD, {0, 0, 0, 1}, VK_COLON},
+        {VK_MINUS, {0, 0, 0, 1}, VK_UNDERSCORE},
+    },
+    {}, {},
+};
+
+/* Italian: FabGL's layout plus the accented-letter keys, which carry
+ * @ # [ ] { } ^ */
+static const KeyboardLayout ItalyLayout = {
+    "IT", "Italian", &ItalianLayout,
+    {
+        {0x54, VK_GRAVE_e},
+        {0x4C, VK_GRAVE_o},
+        {0x52, VK_GRAVE_a},
+        {0x5D, VK_GRAVE_u},
+        {0x55, VK_GRAVE_i},
+    },
+    {},
+    {
+        {VK_GRAVE_e, {0, 0, 0, 1}, VK_ACUTE_e},
+        {VK_GRAVE_e, {0, 0, 1, 0}, VK_LEFTBRACKET},
+        {VK_GRAVE_e, {0, 0, 1, 1}, VK_LEFTBRACE},
+        {VK_GRAVE_o, {0, 0, 0, 1}, VK_CEDILLA_c},
+        {VK_GRAVE_o, {0, 0, 1, 0}, VK_AT},
+        {VK_GRAVE_a, {0, 0, 0, 1}, VK_DEGREE},
+        {VK_GRAVE_a, {0, 0, 1, 0}, VK_HASH},
+        {VK_GRAVE_u, {0, 0, 0, 1}, VK_SECTION},
+        {VK_GRAVE_i, {0, 0, 0, 1}, VK_CARET},
+    },
+    {}, {},
+};
+
+/* Portuguese, Brazil ABNT2. The extra "/ ?" key beside right Shift is
+ * scancode 0x51; AltGr+Q and AltGr+W give the same characters on keyboards
+ * without it. */
+static const KeyboardLayout BrazilLayout = {
+    "BR", "Portuguese (Brazil)", &USLayout,
+    {
+        {0x0E, VK_QUOTE},
+        {0x54, VK_ACUTEACCENT},
+        {0x5B, VK_LEFTBRACKET},
+        {0x4C, VK_CEDILLA_c},
+        {0x52, VK_TILDE},
+        {0x5D, VK_RIGHTBRACKET},
+        {0x61, VK_BACKSLASH},
+        {0x4A, VK_SEMICOLON},
+        {0x51, VK_SLASH},
+    },
+    {},
+    {
+        {VK_6, {0, 0, 0, 1}, VK_DIAERESIS},
+        {VK_ACUTEACCENT, {0, 0, 0, 1}, VK_GRAVEACCENT},
+        {VK_CEDILLA_c, {0, 0, 0, 1}, VK_CEDILLA_C},
+        {VK_TILDE, {0, 0, 0, 1}, VK_CARET},
+        {VK_q, {0, 0, 1, 0}, VK_SLASH},
+        {VK_w, {0, 0, 1, 0}, VK_QUESTION},
+    },
+    {}, {},
+};
+
+/* Indexed by KbdChoice. */
+static const KeyboardLayout *const layouts[KBD_COUNT] = {
+    &USLayout, &LatamLayout, &ItalyLayout, &BrazilLayout};
 
 static const uint8_t letters[26] = {0x3f, 0x15, 0x12, 0x3a, 0x2a, 0x38, 0x3d,
                                     0x39, 0x0d, 0x01, 0x05, 0x00, 0x25, 0x23,
@@ -81,8 +193,11 @@ static int key_event(Atari *a, const fabgl::VirtualKeyItem &k) {
   case fabgl::VK_KP_RIGHT:
     bit = 8;
     break;
-  case fabgl::VK_LALT:
   case fabgl::VK_RALT:
+    if (altgr)
+      return KEY_ACTION_NONE;
+    /* fall through */
+  case fabgl::VK_LALT:
     a->trigger[0] = (uint8_t)!k.down;
     return KEY_ACTION_NONE;
   case fabgl::VK_F2:
@@ -121,6 +236,15 @@ static int key_event(Atari *a, const fabgl::VirtualKeyItem &k) {
 
 void Keyboard_Init(void) {
   ps2.begin(fabgl::PS2Preset::KeyboardPort0, fabgl::KbdMode::CreateVirtualKeysQueue);
+}
+
+void Keyboard_SetLayout(uint8_t layout) {
+  if (layout >= KBD_COUNT)
+    layout = KBD_US;
+  altgr = layout != KBD_US;
+  fabgl::Keyboard *kbd = fabgl::PS2Controller::keyboard();
+  if (kbd)
+    kbd->setLayout(layouts[layout]);
 }
 
 /* F12 down stops the poll, so the keys after it reach the menu once it is

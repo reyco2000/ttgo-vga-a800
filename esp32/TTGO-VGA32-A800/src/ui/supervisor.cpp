@@ -32,7 +32,7 @@ enum { HEADER_H = 24, STRIPE_H = 2, FOOTER_Y = 222 };
 enum { LIST_X = 8, LIST_Y = 46, ROW_H = 16, LIST_ROWS = 10, LIST_COLS = 36 };
 enum { NAME_X = LIST_X + 18, BAR_X = VIDEO_WIDTH - 12, BAR_W = 4 };
 enum { TILE_W = 100, TILE_H = 84, TILE_GAP = 10, TILE_Y = 34 };
-enum { SETUP_ROWS = 4, TILES = 6 };
+enum { SETUP_ROWS = 5, TILES = 6 };
 
 static const char *const disk_exts[] = {".atr", ".xex", NULL};
 static const char *const cart_exts[] = {".rom", ".car", NULL};
@@ -304,10 +304,11 @@ static void draw_setup(void) {
   setup_row(0, "Operating system", os_names[sv.edit.os]);
   setup_row(1, "BASIC", sv.edit.basic ? "On" : "Off");
   setup_row(2, "Video", sv.edit.pal ? "PAL (untested)" : "NTSC");
+  setup_row(3, "Keyboard", Settings_KbdName(sv.edit.kbd));
   /* Apply is a button under the options. */
   static const char apply_text[] = "Apply and restart";
-  bool on = sv.sel == 3;
-  int w = Osd_TextWidth(apply_text) + 24, x = (VIDEO_WIDTH - w) / 2, y = LIST_Y + 3 * 22 + 14;
+  bool on = sv.sel == 4;
+  int w = Osd_TextWidth(apply_text) + 24, x = (VIDEO_WIDTH - w) / 2, y = LIST_Y + 4 * 22 + 14;
   Osd_Rect(x + 3, y + 3, w, 22, OSD_SHADOW);
   Osd_Rect(x, y, w, 22, on ? OSD_RGB(0, 2, 0) : OSD_PANEL);
   if (on)
@@ -529,6 +530,7 @@ static void apply(Action act) {
     s->os = sv.edit.os;
     s->basic = sv.edit.basic;
     s->pal = sv.edit.pal;
+    s->kbd = sv.edit.kbd;
     Settings_Save(s);
     Storage_End();
     esp_restart();
@@ -668,7 +670,8 @@ static void setup_key(int k) {
   case 0: sv.edit.os = (OsChoice)((sv.edit.os + 3 + step) % 3); break;
   case 1: sv.edit.basic = !sv.edit.basic; break;
   case 2: sv.edit.pal = !sv.edit.pal; break;
-  case 3:
+  case 3: sv.edit.kbd = (KbdChoice)((sv.edit.kbd + KBD_COUNT + step) % KBD_COUNT); break;
+  case 4:
     if (k == K_ENTER)
       sv.pending = ACT_APPLY;
     break;

@@ -54,6 +54,7 @@
 /* First-boot defaults only; the saved settings (NVS) take over after. */
 #define USE_BASIC 1     /* 1 = enable BASIC when BASIC_ROM is present */
 #define USE_PAL 0       /* 1 = PAL timing (50 Hz emulation on 60 Hz VGA) */
+#define KBD_LAYOUT 0    /* 0 US, 1 Latam Spanish, 2 Italian, 3 Brazilian ABNT2 */
 #define STATS_PERIOD_MS 2000
 #define TEST_PATTERN_MS 2000 /* colour bars shown at boot; 0 = none */
 #define OSD_SELFTEST 0 /* 1 = draw the OSD test screen for 3 s at boot */

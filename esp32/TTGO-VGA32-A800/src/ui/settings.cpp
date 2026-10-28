@@ -15,6 +15,12 @@ const char *Settings_OsPath(OsChoice os) {
   }
 }
 
+const char *Settings_KbdName(KbdChoice kbd) {
+  static const char *const names[KBD_COUNT] = {"US English", "Latam Spanish",
+                                               "Italian", "Portuguese BR"};
+  return kbd < KBD_COUNT ? names[kbd] : names[KBD_US];
+}
+
 void Settings_ChooseMedia(const Settings *s, bool (*exists)(const char *),
                           const char *autorun, char *media, size_t n) {
   const char *pick = "";
@@ -40,6 +46,7 @@ void Settings_Load(Settings *s) {
   s->os = OS_XL;
   s->basic = USE_BASIC;
   s->pal = USE_PAL;
+  s->kbd = (KbdChoice)KBD_LAYOUT;
   if (!p.begin("a800", true))
     return; /* namespace never written: first boot */
   uint8_t os = p.getUChar("os", OS_XL);
@@ -47,6 +54,9 @@ void Settings_Load(Settings *s) {
     s->os = (OsChoice)os;
   s->basic = p.getBool("basic", USE_BASIC);
   s->pal = p.getBool("pal", USE_PAL);
+  uint8_t kbd = p.getUChar("kbd", KBD_LAYOUT);
+  if (kbd < KBD_COUNT)
+    s->kbd = (KbdChoice)kbd;
   load_path(p, "disk", s->disk, sizeof s->disk);
   load_path(p, "cart", s->cart, sizeof s->cart);
   p.end();
@@ -59,6 +69,7 @@ void Settings_Save(const Settings *s) {
   p.putUChar("os", s->os);
   p.putBool("basic", s->basic);
   p.putBool("pal", s->pal);
+  p.putUChar("kbd", s->kbd);
   p.putString("disk", s->disk);
   p.putString("cart", s->cart);
   p.end();

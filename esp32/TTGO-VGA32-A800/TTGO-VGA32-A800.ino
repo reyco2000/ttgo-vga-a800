@@ -296,6 +296,7 @@ void setup() {
   }
 #endif
   Keyboard_Init();
+  Keyboard_SetLayout(cfg.kbd);
   Pokey_Audio(atari, NULL, 0, AUDIO_RATE);
 #if BENCH_AT_BOOT
   run_bench();

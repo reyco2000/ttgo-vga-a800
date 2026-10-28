@@ -28,6 +28,8 @@ uint32_t Audio_Underruns(void);
  * the supervisor is open every event goes to Supervisor_Key instead. */
 enum { KEY_ACTION_NONE = 0, KEY_ACTION_RESET = 1, KEY_ACTION_SUPERVISOR = 2 };
 void Keyboard_Init(void);
+/* KbdChoice (settings.h); off US, right Alt is AltGr, not the trigger. */
+void Keyboard_SetLayout(uint8_t layout);
 int Keyboard_Poll(Atari *a);
 /* Releases whatever the Atari sees held: key, joystick, trigger, console. */
 void Keyboard_ReleaseAll(Atari *a);
