@@ -9,6 +9,13 @@ extern "C" {
 /* FabGL VGA output; installs the core's line sink. */
 bool Video_Init(Atari *a);
 uint32_t Video_DrawerBusyUs(void); /* core 1 drawing time so far */
+/* Pause returns once every queued line is in the framebuffer; call it from
+ * the emulation task so nothing new is queued. Resume is the symmetric hook
+ * (the next frame repaints every row). */
+void Video_Pause(void);
+void Video_Resume(void);
+uint8_t *Video_Row(int y);             /* framebuffer row, 0..VIDEO_HEIGHT-1 */
+uint8_t Video_Colour(uint8_t atari_colour); /* raw FabGL byte for a palette index */
 
 /* DAC1 timer ISR fed from a ring buffer. */
 void Audio_Init(void);

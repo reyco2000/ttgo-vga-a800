@@ -87,6 +87,20 @@ uint32_t Video_DrawerBusyUs(void) {
 #endif
 }
 
+void Video_Pause(void) {
+#if DRAW_ON_CORE1
+  while (drawn != queued)
+    ;
+  MEMORY_BARRIER();
+#endif
+}
+
+void Video_Resume(void) {}
+
+uint8_t *Video_Row(int y) { return vga.getScanline(y); }
+
+uint8_t Video_Colour(uint8_t atari_colour) { return lut[atari_colour]; }
+
 static uint8_t channel(uint32_t value) { return (uint8_t)((value * 3 + 127) / 255); }
 
 bool Video_Init(Atari *a) {

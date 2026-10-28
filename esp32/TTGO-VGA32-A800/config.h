@@ -55,6 +55,7 @@
 #define USE_PAL 0       /* 1 = PAL timing (50 Hz emulation on 60 Hz VGA) */
 #define STATS_PERIOD_MS 2000
 #define TEST_PATTERN_MS 2000 /* colour bars shown at boot; 0 = none */
+#define OSD_SELFTEST 0 /* 1 = draw the OSD test screen for 3 s at boot */
 #define BENCH_AT_BOOT 0 /* 1 = print a frame-cost breakdown, then reset */
 
 #endif

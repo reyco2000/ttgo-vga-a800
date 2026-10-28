@@ -3,6 +3,7 @@
  * copies the shared core into src/core and sets the core build options. */
 #include "config.h"
 #include "src/hal/hal.h"
+#include "src/ui/osd.h"
 extern "C" {
 #include "src/core/6502.h"
 #include "src/core/Antic.h"
@@ -147,6 +148,25 @@ void setup() {
                 use_basic ? "on" : "off");
   if (!Video_Init(atari))
     halt("cannot allocate the VGA framebuffer");
+#if OSD_SELFTEST
+  {
+    Serial.printf("osd: heap before %u\n",
+                  (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+    Osd_Begin(atari);
+    Osd_Rect(0, 0, VIDEO_WIDTH, VIDEO_HEIGHT, OSD_BG);
+    Osd_Frame(8, 8, VIDEO_WIDTH - 16, VIDEO_HEIGHT - 16, OSD_FG);
+    Osd_Text(8 * 11, 24, "A800 SUPERVISOR", OSD_FG, OSD_BG);
+    Osd_Text(8, 40, "abc xyz {|} 0123456789 !@#$%^&*()", OSD_FG, OSD_BG);
+    Osd_Text(8, 52, " SELECTED ", OSD_SEL_FG, OSD_SEL_BG);
+    for (int i = 0; i < 6; i++) {
+      Osd_Rect(16 + i * 52, 96, 44, 40, OSD_TILE);
+      Osd_Icon(22 + i * 52, 104, (OsdIcon)i, OSD_FG);
+    }
+    Serial.printf("osd: heap after %u\n",
+                  (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+    delay(3000);
+  }
+#endif
   Keyboard_Init();
   Pokey_Audio(atari, NULL, 0, AUDIO_RATE);
 #if BENCH_AT_BOOT
