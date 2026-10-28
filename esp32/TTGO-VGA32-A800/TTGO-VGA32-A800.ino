@@ -4,10 +4,12 @@
 #include "config.h"
 #include "src/hal/hal.h"
 #include "src/ui/osd.h"
+#include "src/ui/settings.h"
 extern "C" {
 #include "src/core/6502.h"
 #include "src/core/Antic.h"
 #include "src/core/Pokey.h"
+#include "src/core/AtariIo.h"
 }
 
 /* Two frames of audio queued ahead of the DAC paces emulation. */
@@ -34,6 +36,68 @@ static void boot_without_basic(void) {
 static bool is_xex(const char *path) {
   size_t n = strlen(path);
   return n >= 4 && !strcasecmp(path + n - 4, ".xex");
+}
+
+static bool file_exists(const char *path) {
+  FILE *f = fopen(path, "rb");
+  if (f)
+    fclose(f);
+  return f != NULL;
+}
+
+/* Builds the machine from the settings, with the SD card mounted: OS and
+ * BASIC, video standard, cartridge, media, then the VGA output (started
+ * once, here). A game cartridge wins over BASIC as a cartridge. */
+static void boot_machine(const Settings *s) {
+  OsChoice os = s->os;
+  bool xl = os == OS_XL;
+  use_basic = s->basic;
+  int r = Atari_Init(atari, Settings_OsPath(os), xl && use_basic ? BASIC_ROM : NULL);
+  if (r == -1 && !xl) {
+    Serial.printf("a800: cannot load %s, using the XL OS\n", Settings_OsPath(os));
+    os = OS_XL, xl = true;
+    r = Atari_Init(atari, Settings_OsPath(os), use_basic ? BASIC_ROM : NULL);
+  }
+  if (r == -2 || r == -3) {
+    Serial.printf("a800: %s, booting without BASIC\n",
+                  r == -2 ? "cannot load " BASIC_ROM : "BASIC requires an XL OS");
+    use_basic = 0;
+    r = Atari_Init(atari, Settings_OsPath(os), NULL);
+  }
+  if (r) {
+    Serial.printf("a800: cannot load %s%s\n",
+                  r == -1 ? Settings_OsPath(os) : BASIC_ROM,
+                  r == -3 ? " (BASIC requires an XL OS)" : "");
+    halt("ROM load failed");
+  }
+  Atari_SetVideoStandard(atari, s->pal ? A800_PAL : A800_NTSC);
+  if (s->cart[0]) {
+    if (AtariIo_LoadCartridge(atari, s->cart))
+      Serial.printf("a800: warning: cannot load cartridge %s\n", s->cart);
+    else
+      Serial.printf("a800: cartridge %s\n", s->cart);
+  } else if (!xl && use_basic) {
+    if (AtariIo_LoadCartridge(atari, BASIC_ROM)) {
+      Serial.printf("a800: cannot load " BASIC_ROM ", booting without BASIC\n");
+      use_basic = 0;
+    }
+  }
+  boot_without_basic();
+  char autorun[128] = "";
+  Storage_ReadAutorun(autorun, sizeof(autorun));
+  Settings_ChooseMedia(s, file_exists, autorun, media, sizeof(media));
+  if (media[0]) {
+    if (is_xex(media))
+      xex = media;
+    else if (Atari_LoadDisk(atari, media))
+      Serial.printf("a800: warning: cannot mount %s\n", media);
+    Serial.printf("a800: media %s\n", media);
+  }
+  Serial.printf("a800: %s %s, BASIC %s\n", Atari_MachineName(atari),
+                atari->video_standard == A800_PAL ? "PAL" : "NTSC",
+                use_basic ? "on" : "off");
+  if (!Video_Init(atari))
+    halt("cannot allocate the VGA framebuffer");
 }
 
 #if BENCH_AT_BOOT
@@ -118,36 +182,12 @@ void setup() {
                   (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
     halt("cannot allocate the machine");
   }
+  Settings cfg;
+  Settings_Load(&cfg);
   if (!Storage_Init())
     halt("cannot mount microSD");
-  use_basic = USE_BASIC;
-  int r = Atari_Init(atari, OS_ROM, use_basic ? BASIC_ROM : NULL);
-  if (r == -2 || r == -3) {
-    Serial.printf("a800: %s, booting without BASIC\n",
-                  r == -2 ? "cannot load " BASIC_ROM : "BASIC requires an XL OS");
-    use_basic = 0;
-    r = Atari_Init(atari, OS_ROM, NULL);
-  }
-  if (r) {
-    Serial.printf("a800: cannot load %s%s\n", r == -1 ? OS_ROM : BASIC_ROM,
-                  r == -3 ? " (BASIC requires an XL OS)" : "");
-    halt("ROM load failed");
-  }
-  Atari_SetVideoStandard(atari, USE_PAL ? A800_PAL : A800_NTSC);
-  boot_without_basic();
-  if (Storage_ReadAutorun(media, sizeof(media))) {
-    if (is_xex(media))
-      xex = media;
-    else if (Atari_LoadDisk(atari, media))
-      Serial.printf("a800: warning: cannot mount %s\n", media);
-    Serial.printf("a800: media %s\n", media);
-  }
-  Storage_End(); /* ROMs and media are in RAM now */
-  Serial.printf("a800: %s %s, BASIC %s\n", Atari_MachineName(atari),
-                atari->video_standard == A800_PAL ? "PAL" : "NTSC",
-                use_basic ? "on" : "off");
-  if (!Video_Init(atari))
-    halt("cannot allocate the VGA framebuffer");
+  boot_machine(&cfg); /* halts on failure; ends with Video_Init */
+  Storage_End();      /* ROMs and media are in RAM now */
 #if OSD_SELFTEST
   {
     Serial.printf("osd: heap before %u\n",

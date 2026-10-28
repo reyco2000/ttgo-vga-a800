@@ -51,6 +51,7 @@
 #define BASIC_ROM ROM_DIR "/ATARIBAS.ROM"
 #define AUTORUN_FILE MEDIA_DIR "/autorun.txt"
 
+/* First-boot defaults only; the saved settings (NVS) take over after. */
 #define USE_BASIC 1     /* 1 = enable BASIC when BASIC_ROM is present */
 #define USE_PAL 0       /* 1 = PAL timing (50 Hz emulation on 60 Hz VGA) */
 #define STATS_PERIOD_MS 2000
