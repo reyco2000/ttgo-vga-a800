@@ -25,8 +25,13 @@ enum Nav {
   K_PGUP, K_PGDN, K_HOME, K_END
 };
 
-/* List geometry: 8x8 text, 10-pixel rows, 40 columns inside the frame. */
-enum { LIST_X = 8, LIST_Y = 40, ROW_H = 10, LIST_ROWS = 16, LIST_COLS = 40 };
+/* Screen layout: a header bar with a colour stripe under it, the body, and
+ * a footer bar of key hints. Lists use 8x14 text in 16-pixel rows, a
+ * marker icon before each name and a scroll bar at the right. */
+enum { HEADER_H = 24, STRIPE_H = 2, FOOTER_Y = 222 };
+enum { LIST_X = 8, LIST_Y = 46, ROW_H = 16, LIST_ROWS = 10, LIST_COLS = 36 };
+enum { NAME_X = LIST_X + 18, BAR_X = VIDEO_WIDTH - 12, BAR_W = 4 };
+enum { TILE_W = 100, TILE_H = 84, TILE_GAP = 10, TILE_Y = 34 };
 enum { SETUP_ROWS = 4, TILES = 6 };
 
 static const char *const disk_exts[] = {".atr", ".xex", NULL};
@@ -69,10 +74,6 @@ static void fit(char *out, const char *s, int cols) {
   memcpy(out, s, (size_t)head);
   memcpy(out + head, "..", 2);
   memcpy(out + head + 2, s + n - tail, (size_t)tail + 1);
-}
-
-static void center(int y, const char *s, uint8_t fg, uint8_t bg) {
-  Osd_Text((VIDEO_WIDTH - (int)strlen(s) * 8) / 2, y, s, fg, bg);
 }
 
 static void message(const char *text) {
@@ -120,130 +121,277 @@ static int clamp(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; 
 
 /* --- drawing ------------------------------------------------------------- */
 
-static void draw_frame(const char *title) {
-  Osd_Rect(0, 0, VIDEO_WIDTH, VIDEO_HEIGHT, OSD_BG);
-  Osd_Frame(4, 4, VIDEO_WIDTH - 8, VIDEO_HEIGHT - 8, OSD_FG);
-  center(12, title, OSD_FG, OSD_BG);
+struct Hint {
+  const char *key, *label;
+};
+
+static void center(int y, const char *s, uint8_t fg, OsdFont font) {
+  Osd_Text((VIDEO_WIDTH - Osd_TextWidth(s, font)) / 2, y, s, fg, OSD_CLEAR, font);
 }
 
-static void draw_row(int r, const char *text, bool selected) {
+/* Header bar with the title and, at the right, a small note; an Atari
+ * rainbow stripe under it. */
+static void draw_frame(const char *title, const char *note) {
+  static const uint8_t stripe[] = {
+      OSD_RGB(3, 0, 0), OSD_RGB(3, 2, 0), OSD_RGB(3, 3, 0),
+      OSD_RGB(0, 3, 0), OSD_RGB(0, 3, 3), OSD_RGB(1, 1, 3)};
+  enum { N = sizeof stripe };
+  Osd_Rect(0, 0, VIDEO_WIDTH, VIDEO_HEIGHT, OSD_BG);
+  Osd_Rect(0, 0, VIDEO_WIDTH, HEADER_H, OSD_HEADER);
+  for (int i = 0; i < N; i++)
+    Osd_Rect(i * VIDEO_WIDTH / N, HEADER_H, VIDEO_WIDTH / N + 1, STRIPE_H, stripe[i]);
+  Osd_Text(10, 4, title, OSD_TITLE, OSD_CLEAR, OSD_FONT_TITLE);
+  if (note)
+    Osd_Text(VIDEO_WIDTH - 10 - Osd_TextWidth(note, OSD_FONT_SMALL), 9, note,
+             OSD_LABEL, OSD_CLEAR, OSD_FONT_SMALL);
+}
+
+/* Footer bar: each key on a light cap, followed by what it does. */
+static void draw_hints(const Hint *h, int n) {
+  int cw = Osd_FontWidth(OSD_FONT_SMALL), w = 0;
+  for (int i = 0; i < n; i++)
+    w += ((int)strlen(h[i].key) + (int)strlen(h[i].label)) * cw + 6 + 4 + 12;
+  int x = (VIDEO_WIDTH - w + 12) / 2, y = FOOTER_Y + 5;
+  Osd_Rect(0, FOOTER_Y, VIDEO_WIDTH, VIDEO_HEIGHT - FOOTER_Y, OSD_HEADER);
+  for (int i = 0; i < n; i++) {
+    int kw = Osd_TextWidth(h[i].key, OSD_FONT_SMALL) + 6;
+    Osd_Rect(x, y - 2, kw, 12, OSD_KEY_BG);
+    Osd_Text(x + 3, y, h[i].key, OSD_KEY_FG, OSD_CLEAR, OSD_FONT_SMALL);
+    x = Osd_Text(x + kw + 4, y, h[i].label, OSD_FG, OSD_CLEAR, OSD_FONT_SMALL) + 12;
+  }
+}
+
+static bool has_ext(const char *name, const char *ext) {
+  const char *dot = strrchr(name, '.');
+  return dot && !strcasecmp(dot, ext);
+}
+
+/* One list row: marker icon and name; the selected row on a bar. */
+static void draw_row(int r, OsdIcon icon, const char *text, uint8_t fg, bool selected) {
   char line[LIST_COLS + 1];
   fit(line, text, LIST_COLS);
   int y = LIST_Y + r * ROW_H;
-  if (selected) {
-    Osd_Rect(LIST_X - 2, y - 1, VIDEO_WIDTH - 2 * (LIST_X - 2), ROW_H, OSD_SEL_BG);
-    Osd_Text(LIST_X, y, line, OSD_SEL_FG, OSD_SEL_BG);
-  } else {
-    Osd_Text(LIST_X, y, line, OSD_FG, OSD_BG);
+  if (selected)
+    Osd_Rect(LIST_X - 2, y, BAR_X - 4 - (LIST_X - 2), ROW_H, OSD_SEL_BG);
+  Osd_Icon(LIST_X + 2, y + 4, icon);
+  Osd_Text(NAME_X, y + 1, line, selected ? OSD_SEL_FG : fg);
+}
+
+static void draw_scrollbar(int n) {
+  if (n <= LIST_ROWS)
+    return;
+  int h = LIST_ROWS * ROW_H, thumb = h * LIST_ROWS / n;
+  if (thumb < 8)
+    thumb = 8;
+  Osd_Rect(BAR_X, LIST_Y, BAR_W, h, OSD_PANEL);
+  Osd_Rect(BAR_X, LIST_Y + (h - thumb) * sv.top / (n - LIST_ROWS), BAR_W, thumb,
+           OSD_BORDER);
+}
+
+static void tile_note(int i, char *out, int cols) {
+  const char *media = Host_Media(), *v = sv.s->pal ? "PAL" : "NTSC";
+  char text[160];
+  switch (i) {
+  case 0: snprintf(text, sizeof text, "%s", media[0] ? base_name(media) : "No disk"); break;
+  case 1:
+    snprintf(text, sizeof text, "%s",
+             sv.a->cart && sv.s->cart[0] ? base_name(sv.s->cart) : "No cartridge");
+    break;
+  case 2: snprintf(text, sizeof text, "Warm or cold"); break;
+  case 3: snprintf(text, sizeof text, "%s  %s", os_names[sv.s->os], v); break;
+  case 4: snprintf(text, sizeof text, "Version %s", FIRMWARE_VERSION); break;
+  default: snprintf(text, sizeof text, "Return to Atari"); break;
   }
+  fit(out, text, cols);
+}
+
+static void machine_note(char *out, int n) {
+  snprintf(out, (size_t)n, "ATARI %s %s", Atari_MachineName(sv.a),
+           sv.a->video_standard == A800_PAL ? "PAL" : "NTSC");
 }
 
 static void draw_main(void) {
-  static const char *const labels[TILES] = {"DISKS", "CART", "RESET",
-                                            "SETUP", "ABOUT", "RESUME"};
-  draw_frame("A800 SUPERVISOR");
+  static const char *const labels[TILES] = {"Disks", "Cartridge", "Reset",
+                                            "Setup", "About", "Resume"};
+  static const Hint hints[] = {
+      {"\x1b\x18\x19\x1a", "Move"}, {"Enter", "Select"}, {"Esc", "Close"}};
+  char note[40];
+  machine_note(note, sizeof note);
+  draw_frame("A800 Supervisor", note);
+  int x0 = (VIDEO_WIDTH - 3 * TILE_W - 2 * TILE_GAP) / 2;
   for (int i = 0; i < TILES; i++) {
-    int x = 12 + (i % 3) * 108, y = 36 + (i / 3) * 84;
+    int x = x0 + (i % 3) * (TILE_W + TILE_GAP);
+    int y = TILE_Y + (i / 3) * (TILE_H + TILE_GAP);
     bool on = i == sv.tile;
-    uint8_t bg = on ? OSD_SEL_BG : OSD_TILE, fg = on ? OSD_SEL_FG : OSD_FG;
-    Osd_Rect(x, y, 96, 72, bg);
-    Osd_Icon(x + 32, y + 14, (OsdIcon)i, fg, bg);
-    Osd_Text(x + (96 - (int)strlen(labels[i]) * 8) / 2, y + 52, labels[i], fg, bg);
+    Osd_Rect(x + 3, y + 3, TILE_W, TILE_H, OSD_SHADOW);
+    Osd_Rect(x, y, TILE_W, TILE_H, on ? OSD_PANEL_HI : OSD_PANEL);
+    if (on) {
+      Osd_Frame(x, y, TILE_W, TILE_H, OSD_TITLE);
+      Osd_Frame(x + 1, y + 1, TILE_W - 2, TILE_H - 2, OSD_TITLE);
+    }
+    Osd_Icon(x + (TILE_W - 32) / 2, y + 8, (OsdIcon)i, 2);
+    Osd_Text(x + (TILE_W - Osd_TextWidth(labels[i])) / 2, y + 44, labels[i],
+             on ? OSD_TITLE : OSD_FG);
+    char text[24];
+    tile_note(i, text, (TILE_W - 8) / Osd_FontWidth(OSD_FONT_SMALL));
+    Osd_Text(x + (TILE_W - Osd_TextWidth(text, OSD_FONT_SMALL)) / 2, y + 64, text,
+             on ? OSD_FG : OSD_DIM, OSD_CLEAR, OSD_FONT_SMALL);
   }
-  center(222, "ARROWS, ENTER   ESC/F12 CLOSE", OSD_FG, OSD_BG);
+  draw_hints(hints, 3);
 }
 
 static void draw_list(void) {
+  static const Hint hints[] = {
+      {"Enter", "Open"}, {"Bksp", "Up"}, {"A-Z", "Jump"}, {"Esc", "Back"}};
   bool disks = sv.screen == SCR_DISKS;
-  draw_frame(disks ? "DISKS" : "CARTRIDGE");
-  char line[LIST_COLS + 1], text[sizeof(BrowserEntry::name) + 16];
-  fit(line, browser.path + 3, LIST_COLS); /* drop the "/sd" mount point */
-  Osd_Text(LIST_X, 24, line, OSD_FG, OSD_BG);
   int n = browser.count + 1;
+  char line[LIST_COLS + 8], text[sizeof(BrowserEntry::name) + 16];
+  snprintf(line, sizeof line, "%d / %d", sv.sel + 1, n);
+  draw_frame(disks ? "Disks" : "Cartridge", line);
+  fit(line, browser.path + 3, LIST_COLS + 4); /* drop the "/sd" mount point */
+  Osd_Icon(LIST_X + 2, 32, ICON_FOLDER);
+  Osd_Text(NAME_X, 32, line, OSD_LABEL, OSD_CLEAR, OSD_FONT_SMALL);
   for (int r = 0; r < LIST_ROWS && sv.top + r < n; r++) {
     int i = sv.top + r;
+    bool on = i == sv.sel;
     if (i == 0 && disks) {
       const char *m = Host_Media();
-      snprintf(text, sizeof text, "EJECT D1: %s", m[0] ? base_name(m) : "EMPTY");
+      if (m[0])
+        snprintf(text, sizeof text, "Eject D1: %s", base_name(m));
+      else
+        snprintf(text, sizeof text, "D1: empty");
+      draw_row(r, ICON_EJECT, text, OSD_ALERT, on);
     } else if (i == 0) {
-      snprintf(text, sizeof text, "REMOVE CARTRIDGE");
+      draw_row(r, ICON_EJECT, "Remove cartridge", OSD_ALERT, on);
     } else {
       const BrowserEntry *e = &browser.entries[i - 1];
-      snprintf(text, sizeof text, "%s%s", e->name, e->dir ? "/" : "");
+      if (e->dir) {
+        snprintf(text, sizeof text, "%s/", e->name);
+        draw_row(r, ICON_FOLDER, text, OSD_LABEL, on);
+      } else if (!disks) {
+        draw_row(r, ICON_ROM, e->name, OSD_WARM, on);
+      } else if (has_ext(e->name, ".xex")) {
+        draw_row(r, ICON_XEX, e->name, OSD_GOOD, on);
+      } else {
+        draw_row(r, ICON_ATR, e->name, OSD_FG, on);
+      }
     }
-    draw_row(r, text, i == sv.sel);
   }
+  draw_scrollbar(n);
   if (browser.capped)
-    center(206, "OVER 256 FILES: USE SUBFOLDERS", OSD_FG, OSD_BG);
-  snprintf(text, sizeof text, "%d/%d  ENTER SELECT  ESC BACK", sv.sel + 1, n);
-  center(222, text, OSD_FG, OSD_BG);
+    center(LIST_Y + LIST_ROWS * ROW_H + 4, "Over 256 files: use subfolders",
+           OSD_ALERT, OSD_FONT_SMALL);
+  draw_hints(hints, 4);
+}
+
+/* One "label   < value >" line of the Setup screen. */
+static void setup_row(int r, const char *label, const char *value) {
+  bool on = sv.sel == r;
+  int y = LIST_Y + r * 22;
+  if (on)
+    Osd_Rect(LIST_X + 8, y - 3, VIDEO_WIDTH - 2 * (LIST_X + 8), 20, OSD_SEL_BG);
+  Osd_Text(LIST_X + 16, y, label, on ? OSD_SEL_FG : OSD_LABEL);
+  int x = 184;
+  x = Osd_Text(x, y, "\x11 ", on ? OSD_SEL_FG : OSD_DIM);
+  x = Osd_Text(x, y, value, OSD_VALUE);
+  Osd_Text(x, y, " \x10", on ? OSD_SEL_FG : OSD_DIM);
 }
 
 static void draw_setup(void) {
-  char text[LIST_COLS + 1];
-  draw_frame("SETUP");
-  snprintf(text, sizeof text, "OS: %s", os_names[sv.edit.os]);
-  draw_row(0, text, sv.sel == 0);
-  draw_row(1, sv.edit.basic ? "BASIC: ON" : "BASIC: OFF", sv.sel == 1);
-  draw_row(2, sv.edit.pal ? "VIDEO: PAL (UNTESTED)" : "VIDEO: NTSC", sv.sel == 2);
-  draw_row(4, "APPLY AND RESTART", sv.sel == 3);
-  center(206, "LEFT/RIGHT CHANGE", OSD_FG, OSD_BG);
-  center(222, "ENTER APPLY   ESC CANCEL", OSD_FG, OSD_BG);
+  static const Hint hints[] = {
+      {"\x18\x19", "Move"}, {"\x1b\x1a", "Change"}, {"Enter", "Apply"}, {"Esc", "Cancel"}};
+  draw_frame("Setup", "SAVED IN FLASH");
+  setup_row(0, "Operating system", os_names[sv.edit.os]);
+  setup_row(1, "BASIC", sv.edit.basic ? "On" : "Off");
+  setup_row(2, "Video", sv.edit.pal ? "PAL (untested)" : "NTSC");
+  /* Apply is a button under the options. */
+  static const char apply_text[] = "Apply and restart";
+  bool on = sv.sel == 3;
+  int w = Osd_TextWidth(apply_text) + 24, x = (VIDEO_WIDTH - w) / 2, y = LIST_Y + 3 * 22 + 14;
+  Osd_Rect(x + 3, y + 3, w, 22, OSD_SHADOW);
+  Osd_Rect(x, y, w, 22, on ? OSD_RGB(0, 2, 0) : OSD_PANEL);
+  if (on)
+    Osd_Frame(x, y, w, 22, OSD_GOOD);
+  center(y + 4, apply_text, on ? OSD_FG : OSD_DIM, OSD_FONT_BODY);
+  center(y + 40, "The machine restarts with the new settings.", OSD_DIM,
+         OSD_FONT_SMALL);
+  draw_hints(hints, 4);
 }
 
 /* One "LABEL     value" line of the About screen. */
-static void about_row(int r, const char *label, const char *fmt, ...) {
+static void about_row(int r, const char *label, uint8_t colour, const char *fmt, ...) {
+  enum { VALUE_X = 120 };
   char value[160], line[LIST_COLS + 1];
   va_list ap;
   va_start(ap, fmt);
   vsnprintf(value, sizeof value, fmt, ap);
   va_end(ap);
-  int n = snprintf(line, sizeof line, "%-10s", label);
-  fit(line + n, value, LIST_COLS - 1 - n);
-  Osd_Text(LIST_X + 8, LIST_Y + r * 12, line, OSD_FG, OSD_BG);
+  int y = 36 + r * 19;
+  Osd_Text(LIST_X + 16, y, label, OSD_LABEL);
+  fit(line, value, (VIDEO_WIDTH - VALUE_X - 12) / Osd_FontWidth(OSD_FONT_BODY));
+  Osd_Text(VALUE_X, y, line, colour);
 }
 
 static void draw_about(void) {
+  static const Hint hints[] = {{"Esc", "Back"}};
   const Atari *a = sv.a;
   const char *media = Host_Media();
-  const char *basic = !Host_Basic() ? "OFF"
-                      : a->machine_type == A800_MACHINE_XL ? "ON (BUILT-IN)"
-                                                           : "ON (CARTRIDGE)";
-  draw_frame("ABOUT");
+  const char *basic = !Host_Basic() ? "Off"
+                      : a->machine_type == A800_MACHINE_XL ? "On (built in)"
+                                                           : "On (cartridge)";
+  char note[40];
+  machine_note(note, sizeof note);
+  draw_frame("About", note);
   int r = 0;
 #define row(...) about_row(r++, __VA_ARGS__)
-  row("FIRMWARE", "%s", FIRMWARE_VERSION);
-  row("MACHINE", "ATARI %s %s", Atari_MachineName(a),
+  row("Firmware", OSD_TITLE, "%s", FIRMWARE_VERSION);
+  row("Machine", OSD_FG, "Atari %s %s", Atari_MachineName(a),
       a->video_standard == A800_PAL ? "PAL" : "NTSC");
-  row("OS", "%s", base_name(Settings_OsPath(Host_BootedOs())));
-  row("BASIC", "%s", basic);
-  row("CART", "%s", a->cart && sv.s->cart[0] ? base_name(sv.s->cart) : "NONE");
-  row("DISK", "%s", media[0] ? base_name(media) : "NONE");
-  row("INTERNAL", "%u BYTES FREE",
+  row("OS", OSD_FG, "%s", base_name(Settings_OsPath(Host_BootedOs())));
+  row("BASIC", OSD_FG, "%s", basic);
+  row("Cartridge", OSD_WARM, "%s", a->cart && sv.s->cart[0] ? base_name(sv.s->cart) : "None");
+  row("Disk", OSD_GOOD, "%s", media[0] ? base_name(media) : "None");
+  row("Internal", OSD_FG, "%u bytes free",
       (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
-  row("PSRAM", "%u BYTES FREE",
+  row("PSRAM", OSD_FG, "%u bytes free",
       (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
-  row("SPEED", "%.1f FPS", Host_Fps());
+  row("Speed", OSD_VALUE, "%.1f fps", Host_Fps());
 #undef row
-  center(222, "ESC BACK", OSD_FG, OSD_BG);
+  draw_hints(hints, 1);
 }
 
-/* A box centred on the screen: a title line, then n choice rows. */
-static void draw_popup(const char *title, const char *const *rows, int n) {
-  int cols = (int)strlen(title);
+/* A dialog centred on the screen: a coloured title bar, up to two lines of
+ * text, then a row of buttons. */
+static void draw_popup(const char *title, uint8_t bar, const char *const *lines,
+                       int nlines, const char *const *buttons, int n) {
+  enum { BTN_H = 18, BTN_GAP = 10 };
+  int bw = 0;
   for (int i = 0; i < n; i++)
-    if ((int)strlen(rows[i]) + 2 > cols)
-      cols = (int)strlen(rows[i]) + 2;
-  int w = cols * 8 + 32, h = 32 + n * 12;
+    bw += Osd_TextWidth(buttons[i]) + 24 + (i ? BTN_GAP : 0);
+  int w = bw;
+  if (Osd_TextWidth(title) > w)
+    w = Osd_TextWidth(title);
+  for (int i = 0; i < nlines; i++)
+    if (Osd_TextWidth(lines[i]) > w)
+      w = Osd_TextWidth(lines[i]);
+  w += 32;
+  int h = 22 + 10 + nlines * 16 + 8 + BTN_H + 12;
   int x = (VIDEO_WIDTH - w) / 2, y = (VIDEO_HEIGHT - h) / 2;
-  Osd_Rect(x, y, w, h, OSD_TILE);
-  Osd_Frame(x, y, w, h, OSD_FG);
-  center(y + 8, title, OSD_FG, OSD_TILE);
+  Osd_Rect(x + 5, y + 5, w, h, OSD_SHADOW);
+  Osd_Rect(x, y, w, h, OSD_PANEL);
+  Osd_Rect(x, y, w, 22, bar);
+  Osd_Frame(x, y, w, h, OSD_BORDER);
+  center(y + 4, title, OSD_FG, OSD_FONT_BODY);
+  for (int i = 0; i < nlines; i++)
+    center(y + 32 + i * 16, lines[i], OSD_FG, OSD_FONT_BODY);
+  int bx = (VIDEO_WIDTH - bw) / 2, by = y + h - 12 - BTN_H;
   for (int i = 0; i < n; i++) {
-    int ry = y + 24 + i * 12, rw = ((int)strlen(rows[i]) + 2) * 8;
+    int tw = Osd_TextWidth(buttons[i]) + 24;
     bool on = i == sv.pop_sel;
-    Osd_Rect((VIDEO_WIDTH - rw) / 2, ry - 2, rw, 11, on ? OSD_SEL_BG : OSD_TILE);
-    center(ry, rows[i], on ? OSD_SEL_FG : OSD_FG, on ? OSD_SEL_BG : OSD_TILE);
+    Osd_Rect(bx, by, tw, BTN_H, on ? OSD_SEL_BG : OSD_BG);
+    Osd_Frame(bx, by, tw, BTN_H, on ? OSD_FG : OSD_BORDER);
+    Osd_Text(bx + 12, by + 2, buttons[i], on ? OSD_SEL_FG : OSD_DIM);
+    bx += tw + BTN_GAP;
   }
 }
 
@@ -254,14 +402,33 @@ static void draw(void) {
   case SCR_SETUP: draw_setup(); break;
   case SCR_ABOUT: draw_about(); break;
   }
-  static const char *const reset_rows[] = {"NO", "WARM", "COLD"};
-  static const char *const confirm_rows[] = {"NO", "YES"};
-  static const char *const ok_row[] = {"OK"};
+  static const char *const reset_buttons[] = {"No", "Warm", "Cold"};
+  static const char *const confirm_buttons[] = {"No", "Yes"};
+  static const char *const ok_button[] = {"OK"};
+  static const char *const reset_lines[] = {"Reset the Atari?"};
+  char file[LIST_COLS + 1];
+  const char *lines[2];
   switch (sv.popup) {
   case POP_NONE: break;
-  case POP_RESET: draw_popup("RESET THE ATARI?", reset_rows, 3); break;
-  case POP_CONFIRM: draw_popup("REBOOT NOW?", confirm_rows, 2); break;
-  case POP_MESSAGE: draw_popup(sv.message, ok_row, 1); break;
+  case POP_RESET:
+    draw_popup("Reset", OSD_RGB(2, 1, 0), reset_lines, 1, reset_buttons, 3);
+    break;
+  case POP_CONFIRM:
+    if (sv.confirm == ACT_CART_REMOVE) {
+      lines[0] = "Remove the cartridge?";
+    } else {
+      fit(file, base_name(sv.path), 30);
+      lines[0] = file;
+    }
+    lines[1] = "The Atari will reboot.";
+    draw_popup(sv.confirm == ACT_CART_REMOVE ? "Remove cartridge"
+               : sv.confirm == ACT_CART    ? "Insert cartridge"
+                                           : "Load disk",
+               OSD_HEADER, lines, 2, confirm_buttons, 2);
+    break;
+  case POP_MESSAGE:
+    draw_popup("Notice", OSD_RGB(2, 0, 0), &sv.message, 1, ok_button, 1);
+    break;
   }
 }
 
@@ -284,14 +451,14 @@ static void open_list(Screen screen) {
   if (!sv.sd_ok)
     sv.sd_ok = Storage_Init(); /* the card may have been inserted since */
   if (!sv.sd_ok) {
-    message("NO SD CARD");
+    message("No SD card");
     return;
   }
   const char *const *exts = screen == SCR_DISKS ? disk_exts : cart_exts;
   const char *dir = sv.last_dir[screen == SCR_CART];
   if ((!dir[0] || Browser_Open(&browser, dir, exts)) &&
       Browser_Open(&browser, MEDIA_DIR, exts)) {
-    message("CANNOT READ /ATARI");
+    message("Cannot read /atari");
     return;
   }
   show_list(screen);
@@ -318,13 +485,13 @@ static void apply(Action act) {
   case ACT_ENTER_DIR:
     if (Browser_Enter(&browser, sv.sel - 1,
                       sv.screen == SCR_DISKS ? disk_exts : cart_exts))
-      message("CANNOT READ FOLDER");
+      message("Cannot read folder");
     else
       show_list(sv.screen);
     break;
   case ACT_MOUNT:
     if (Host_Mount(sv.path)) {
-      message("CANNOT LOAD FILE");
+      message("Cannot load file");
       break;
     }
     save_slots(s->cart);
@@ -337,7 +504,7 @@ static void apply(Action act) {
   case ACT_CART:
     r = Host_Cart(sv.path);
     if (r) {
-      message(r == -2 ? "CARTRIDGE TYPE NOT SUPPORTED" : "CANNOT LOAD FILE");
+      message(r == -2 ? "Cartridge type not supported" : "Cannot load file");
       break;
     }
     save_slots(sv.path);
@@ -457,14 +624,14 @@ static void list_key(int k, uint8_t ascii) {
       } else if (sv.s->cart[0]) {
         ask(ACT_CART_REMOVE);
       } else {
-        message("NO CARTRIDGE INSERTED");
+        message("No cartridge inserted");
       }
     } else if (browser.entries[sv.sel - 1].dir) {
       sv.pending = ACT_ENTER_DIR;
     } else {
       Browser_FullPath(&browser, sv.sel - 1, sv.path, sizeof sv.path);
       if (strlen(sv.path) >= sizeof(sv.s->disk))
-        message("PATH TOO LONG");
+        message("Path too long");
       else
         ask(sv.screen == SCR_DISKS ? ACT_MOUNT : ACT_CART);
     }
@@ -517,7 +684,7 @@ void Supervisor_Open(Atari *a, Settings *s) {
   sv.s = s;
   Keyboard_ReleaseAll(a);
   Video_Pause(); /* no emulator line may land on the menu */
-  Osd_Begin(a);
+  Osd_Begin();
   sv.sd_ok = Storage_Init();
   snprintf(browser.root, sizeof browser.root, "%s", MEDIA_DIR);
   sv.active = sv.dirty = true;

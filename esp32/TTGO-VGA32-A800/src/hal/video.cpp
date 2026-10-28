@@ -101,6 +101,11 @@ uint8_t *Video_Row(int y) { return vga.getScanline(y); }
 
 uint8_t Video_Colour(uint8_t atari_colour) { return lut[atari_colour]; }
 
+uint8_t Video_Rgb(uint8_t rgb222) {
+  return vga.createRawPixel(
+      fabgl::RGB222(rgb222 & 3, rgb222 >> 2 & 3, rgb222 >> 4 & 3));
+}
+
 static uint8_t channel(uint32_t value) { return (uint8_t)((value * 3 + 127) / 255); }
 
 bool Video_Init(Atari *a) {

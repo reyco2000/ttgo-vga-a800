@@ -16,6 +16,7 @@ void Video_Pause(void);
 void Video_Resume(void);
 uint8_t *Video_Row(int y);             /* framebuffer row, 0..VIDEO_HEIGHT-1 */
 uint8_t Video_Colour(uint8_t atari_colour); /* raw FabGL byte for a palette index */
+uint8_t Video_Rgb(uint8_t rgb222);          /* raw FabGL byte for R | G<<2 | B<<4 */
 
 /* DAC1 timer ISR fed from a ring buffer. */
 void Audio_Init(void);

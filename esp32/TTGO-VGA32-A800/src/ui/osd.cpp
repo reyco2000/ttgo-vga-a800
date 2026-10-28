@@ -1,5 +1,6 @@
 /* OSD drawing: pixels go straight into the scanned-out framebuffer rows.
  * Clipped to the 336x240 screen. */
+#include "fabgl.h"
 #include "osd.h"
 #include "../hal/hal.h"
 #include "../../config.h"
@@ -7,13 +8,14 @@
 /* FabGL stores each 32-bit word's pixels in the order 2, 3, 0, 1. */
 #define PIXEL(row, x) (row)[(x) ^ 2]
 
-static const uint8_t *font; /* 128 glyphs x 8 bytes, ANTIC internal order */
+static const fabgl::FontInfo *const fonts[] = {
+    &fabgl::FONT_8x14, &fabgl::FONT_SANSERIF_8x16, &fabgl::FONT_6x8};
 
-void Osd_Begin(const Atari *a) { font = a->os + 0x2000; }
+void Osd_Begin(void) {}
 
-static inline void put(int x, int y, uint8_t colour) {
+static inline void put(int x, int y, uint8_t raw) {
   if ((unsigned)x < (unsigned)VIDEO_WIDTH && (unsigned)y < (unsigned)VIDEO_HEIGHT)
-    PIXEL(Video_Row(y), x) = colour;
+    PIXEL(Video_Row(y), x) = raw;
 }
 
 void Osd_Rect(int x, int y, int w, int h, uint8_t colour) {
@@ -21,7 +23,7 @@ void Osd_Rect(int x, int y, int w, int h, uint8_t colour) {
   if (y < 0) h += y, y = 0;
   if (x + w > VIDEO_WIDTH) w = VIDEO_WIDTH - x;
   if (y + h > VIDEO_HEIGHT) h = VIDEO_HEIGHT - y;
-  uint8_t c = Video_Colour(colour);
+  uint8_t c = Video_Rgb(colour);
   for (int j = 0; j < h; j++) {
     uint8_t *row = Video_Row(y + j);
     for (int i = 0; i < w; i++)
@@ -36,99 +38,145 @@ void Osd_Frame(int x, int y, int w, int h, uint8_t colour) {
   Osd_Rect(x + w - 1, y, 1, h, colour);
 }
 
-int Osd_TextCols(void) { return VIDEO_WIDTH / 8; }
+/* The title font is drawn twice, one pixel apart, for a bold face. */
+int Osd_FontWidth(OsdFont font) {
+  return fonts[font]->width + (font == OSD_FONT_TITLE);
+}
 
-void Osd_Text(int x, int y, const char *s, uint8_t fg, uint8_t bg) {
-  if (!font)
-    return;
-  uint8_t f = Video_Colour(fg), b = Video_Colour(bg);
-  for (; *s; s++, x += 8) {
-    unsigned c = (uint8_t)*s;
-    if (c < 0x20 || c > 0x7f)
-      c = '?';
-    unsigned code = c < 0x60 ? c - 0x20 : c;
-    const uint8_t *glyph = font + code * 8;
-    for (int j = 0; j < 8; j++) {
+int Osd_FontHeight(OsdFont font) { return fonts[font]->height; }
+
+int Osd_TextWidth(const char *s, OsdFont font) {
+  return (int)strlen(s) * Osd_FontWidth(font);
+}
+
+int Osd_Text(int x, int y, const char *s, uint8_t fg, uint8_t bg, OsdFont font) {
+  const fabgl::FontInfo *f = fonts[font];
+  int h = f->height, advance = Osd_FontWidth(font);
+  bool bold = font == OSD_FONT_TITLE;
+  uint8_t ink = Video_Rgb(fg), paper = bg == OSD_CLEAR ? 0 : Video_Rgb(bg);
+  for (; *s; s++, x += advance) {
+    unsigned c = (uint8_t)*s; /* code page 437: 0x10..0x1b are arrows */
+    const uint8_t *glyph = f->data + c * h; /* widths up to 8: a byte a row */
+    for (int j = 0; j < h; j++) {
       if ((unsigned)(y + j) >= (unsigned)VIDEO_HEIGHT)
         continue;
       uint8_t *row = Video_Row(y + j);
-      for (int i = 0; i < 8; i++)
-        if ((unsigned)(x + i) < (unsigned)VIDEO_WIDTH)
-          PIXEL(row, x + i) = glyph[j] & (0x80 >> i) ? f : b;
+      unsigned bits = glyph[j] << 1; /* column i is bit 0x100 >> i */
+      if (bold)
+        bits |= bits >> 1;
+      for (int i = 0; i < advance; i++) {
+        if ((unsigned)(x + i) >= (unsigned)VIDEO_WIDTH)
+          continue;
+        if (bits & (0x100 >> i))
+          PIXEL(row, x + i) = ink;
+        else if (bg != OSD_CLEAR)
+          PIXEL(row, x + i) = paper;
+      }
     }
+  }
+  return x;
+}
+
+/* --- icons --------------------------------------------------------------- */
+
+/* Pixel art, one character per pixel; '.' is transparent. */
+static uint8_t art_colour(char c) {
+  switch (c) {
+  case 'k': return OSD_RGB(0, 0, 0);
+  case 'd': return OSD_RGB(1, 1, 1);
+  case 'g': return OSD_RGB(2, 2, 2);
+  case 'w': return OSD_RGB(3, 3, 3);
+  case 'b': return OSD_RGB(0, 1, 3);
+  case 'B': return OSD_RGB(1, 2, 3);
+  case 'r': return OSD_RGB(3, 0, 0);
+  case 'o': return OSD_RGB(3, 2, 0);
+  case 'y': return OSD_RGB(3, 3, 0);
+  case 'G': return OSD_RGB(0, 3, 0);
+  default: return OSD_CLEAR;
   }
 }
 
-static void line(int x0, int y0, int x1, int y1, uint8_t colour) {
-  uint8_t c = Video_Colour(colour);
-  int dx = x1 > x0 ? x1 - x0 : x0 - x1, dy = y1 > y0 ? y0 - y1 : y1 - y0;
-  int sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1, err = dx + dy;
-  for (;;) {
-    put(x0, y0, c);
-    if (x0 == x1 && y0 == y1)
-      break;
-    int e2 = 2 * err;
-    if (e2 >= dy) err += dy, x0 += sx;
-    if (e2 <= dx) err += dx, y0 += sy;
-  }
-}
+static const char *const art_disk[16] = {
+    "kkkkkkkkkkkkkk..", "kbbggggggggbbbk.", "kbbggggddggbbbbk",
+    "kbbggggddggbbbbk", "kbbggggddggbbbbk", "kbbggggggggbbbbk",
+    "kbbbbbbbbbbbbbbk", "kbbbbbbbbbbbbbbk", "kbbwwwwwwwwwwbbk",
+    "kbbwrrrrrrrrwbbk", "kbbwwwwwwwwwwbbk", "kbbwkkkkkkkkwbbk",
+    "kbbwwwwwwwwwwbbk", "kbbwkkkkkkkwwbbk", "kbbwwwwwwwwwwbbk",
+    "kkkkkkkkkkkkkkkk"};
 
-/* Circle outline by midpoint steps. */
-static void ring(int cx, int cy, int r, uint8_t colour) {
-  uint8_t c = Video_Colour(colour);
-  int x = r, y = 0, err = 1 - r;
-  while (x >= y) {
-    put(cx + x, cy + y, c); put(cx - x, cy + y, c);
-    put(cx + x, cy - y, c); put(cx - x, cy - y, c);
-    put(cx + y, cy + x, c); put(cx - y, cy + x, c);
-    put(cx + y, cy - x, c); put(cx - y, cy - x, c);
-    y++;
-    if (err < 0) err += 2 * y + 1;
-    else x--, err += 2 * (y - x) + 1;
-  }
-}
+static const char *const art_cart[16] = {
+    "..kkkkkkkkkkkk..", ".kddddddddddddk.", ".kdrrrrrrrrrrdk.",
+    ".kdoooooooooodk.", ".kdyyyyyyyyyydk.", ".kdwwwwwwwwwwdk.",
+    ".kdwkkkwkkkkwdk.", ".kdwwwwwwwwwwdk.", ".kddddddddddddk.",
+    ".kddddddddddddk.", ".kkkkkkkkkkkkkk.", "..kddddddddddk..",
+    "..kdydydydydyk..", "..kdydydydydyk..", "..kdydydydydyk..",
+    "..kkkkkkkkkkkk.."};
 
-void Osd_Icon(int x, int y, OsdIcon icon, uint8_t fg, uint8_t bg) {
-  switch (icon) {
-  case ICON_DISK: /* floppy: body, shutter, label */
-    Osd_Frame(x + 4, y, 24, 24, fg);
-    Osd_Rect(x + 9, y, 14, 8, fg);
-    Osd_Rect(x + 17, y + 1, 3, 6, bg);
-    Osd_Frame(x + 8, y + 12, 16, 12, fg);
-    break;
-  case ICON_CART: /* cartridge: body with notch and contacts */
-    Osd_Frame(x + 4, y + 2, 24, 16, fg);
-    Osd_Rect(x + 8, y + 6, 16, 3, fg);
-    Osd_Rect(x + 8, y + 12, 16, 2, fg);
-    Osd_Rect(x + 8, y + 18, 16, 5, fg);
-    for (int i = 0; i < 5; i++)
-      Osd_Rect(x + 9 + i * 3, y + 19, 1, 4, bg);
-    break;
-  case ICON_RESET: /* circular arrow */
-    ring(x + 16, y + 12, 10, fg);
-    ring(x + 16, y + 12, 9, fg);
-    Osd_Rect(x + 16, y + 1, 12, 8, bg);       /* gap at upper right */
-    Osd_Rect(x + 16, y + 3, 11, 2, fg);       /* arrow head */
-    line(x + 27, y + 4, x + 22, y, fg);
-    line(x + 27, y + 4, x + 22, y + 8, fg);
-    break;
-  case ICON_SETUP: /* three slider bars */
-    for (int i = 0; i < 3; i++) {
-      Osd_Rect(x + 4, y + 3 + i * 8, 24, 2, fg);
-      Osd_Rect(x + 8 + ((i * 9) % 14), y + 1 + i * 8, 4, 6, fg);
+static const char *const art_reset[16] = {
+    "................", ".....oooooo.....", "...oooooooooo...",
+    "..oooo....oooo..", ".ooo........ooo.", ".ooo........ooo.",
+    "ooo.......oooooo", "ooo........oooo.", "ooo.........oo..",
+    "ooo.............", ".ooo............", ".ooo........ooo.",
+    "..oooo....oooo..", "...oooooooooo...", ".....oooooo.....",
+    "................"};
+
+static const char *const art_setup[16] = {
+    "...kkkk.........", "...krrk.........", "gggkrrkggggggggg",
+    "...krrk.........", "...kkkk.........", "..........kkkk..",
+    "..........kyyk..", "ggggggggggkyykgg", "..........kyyk..",
+    "..........kkkk..", "......kkkk......", "......kGGk......",
+    "ggggggkGGkgggggg", "......kGGk......", "......kkkk......",
+    "................"};
+
+static const char *const art_about[16] = {
+    ".....kkkkkk.....", "...kkbbbbbbkk...", "..kbbbbbbbbbbk..",
+    ".kbbbbbwwbbbbbk.", ".kbbbbbwwbbbbbk.", "kbbbbbbbbbbbbbbk",
+    "kbbbbbwwwbbbbbbk", "kbbbbbbwwbbbbbbk", "kbbbbbbwwbbbbbbk",
+    "kbbbbbbwwbbbbbbk", "kbbbbbbwwbbbbbbk", ".kbbbbwwwwbbbbk.",
+    ".kbbbbbbbbbbbbk.", "..kbbbbbbbbbbk..", "...kkbbbbbbkk...",
+    ".....kkkkkk....."};
+
+static const char *const art_resume[16] = {
+    ".....kkkkkk.....", "...kkGGGGGGkk...", "..kGGGGGGGGGGk..",
+    ".kGGGGwGGGGGGGk.", ".kGGGGwwGGGGGGk.", "kGGGGGwwwGGGGGGk",
+    "kGGGGGwwwwGGGGGk", "kGGGGGwwwwwGGGGk", "kGGGGGwwwwwGGGGk",
+    "kGGGGGwwwwGGGGGk", "kGGGGGwwwGGGGGGk", ".kGGGGwwGGGGGGk.",
+    ".kGGGGwGGGGGGGk.", "..kGGGGGGGGGGk..", "...kkGGGGGGkk...",
+    ".....kkkkkk....."};
+
+static const char *const art_folder[8] = {
+    "........", ".ooo....", "oyyyoooo", "oyyyyyyo",
+    "oyyyyyyo", "oyyyyyyo", "oooooooo", "........"};
+
+static const char *const art_atr[8] = {
+    "BBBBBBB.", "BBgggBBB", "BBgdgBBB", "BBBBBBBB",
+    "BwwwwwwB", "BwrrrrwB", "BwwwwwwB", "BBBBBBBB"};
+
+static const char *const art_xex[8] = {
+    ".G......", ".GGG....", ".GGGGG..", ".GGGGGGG",
+    ".GGGGGGG", ".GGGGG..", ".GGG....", ".G......"};
+
+static const char *const art_rom[8] = {
+    "oooooooo", "owwwwwwo", "orrrrrro", "oyyyyyyo",
+    "oooooooo", ".gggggg.", ".yyyyyy.", ".y.yy.y."};
+
+static const char *const art_eject[8] = {
+    "...rr...", "..rrrr..", ".rrrrrr.", "rrrrrrrr",
+    "........", "rrrrrrrr", "rrrrrrrr", "........"};
+
+static const char *const *const art[] = {
+    art_disk, art_cart, art_reset, art_setup, art_about, art_resume,
+    art_folder, art_atr, art_xex, art_rom, art_eject};
+
+int Osd_IconSize(OsdIcon icon) { return icon < ICON_FOLDER ? 16 : 8; }
+
+void Osd_Icon(int x, int y, OsdIcon icon, int scale) {
+  const char *const *rows = art[icon];
+  int n = Osd_IconSize(icon);
+  for (int j = 0; j < n; j++)
+    for (int i = 0; i < n; i++) {
+      uint8_t c = art_colour(rows[j][i]);
+      if (c != OSD_CLEAR)
+        Osd_Rect(x + i * scale, y + j * scale, scale, scale, c);
     }
-    break;
-  case ICON_ABOUT: /* circled i */
-    ring(x + 16, y + 12, 11, fg);
-    ring(x + 16, y + 12, 10, fg);
-    Osd_Rect(x + 15, y + 5, 3, 3, fg);
-    Osd_Rect(x + 15, y + 10, 3, 9, fg);
-    break;
-  case ICON_RESUME: /* play triangle */
-    for (int i = 0; i < 20; i++) {
-      int half = (19 - i) / 2 + 1;
-      Osd_Rect(x + 8 + i, y + 12 - half, 1, 2 * half, fg);
-    }
-    break;
-  }
 }

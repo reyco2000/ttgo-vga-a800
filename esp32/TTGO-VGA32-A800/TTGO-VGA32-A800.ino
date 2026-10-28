@@ -137,10 +137,12 @@ static void boot_machine(Settings *s) {
   bool xl = os == OS_XL;
   use_basic = s->basic;
   int r = Atari_Init(atari, Settings_OsPath(os), xl && use_basic ? BASIC_ROM : NULL);
-  if (r == -1 && !xl) {
-    Serial.printf("a800: cannot load %s, using the XL OS\n", Settings_OsPath(os));
-    os = OS_XL, xl = true;
-    r = Atari_Init(atari, Settings_OsPath(os), use_basic ? BASIC_ROM : NULL);
+  if (r == -1) { /* a missing XL OS falls back to OS-B, an 800 OS to XL */
+    OsChoice alt = xl ? OS_800B : OS_XL;
+    Serial.printf("a800: cannot load %s, using %s\n", Settings_OsPath(os),
+                  Settings_OsPath(alt));
+    os = alt, xl = os == OS_XL;
+    r = Atari_Init(atari, Settings_OsPath(os), xl && use_basic ? BASIC_ROM : NULL);
   }
   if (r == -2 || r == -3) {
     Serial.printf("a800: %s, booting without BASIC\n",
@@ -277,15 +279,16 @@ void setup() {
   {
     Serial.printf("osd: heap before %u\n",
                   (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
-    Osd_Begin(atari);
+    Osd_Begin();
     Osd_Rect(0, 0, VIDEO_WIDTH, VIDEO_HEIGHT, OSD_BG);
-    Osd_Frame(8, 8, VIDEO_WIDTH - 16, VIDEO_HEIGHT - 16, OSD_FG);
-    Osd_Text(8 * 11, 24, "A800 SUPERVISOR", OSD_FG, OSD_BG);
-    Osd_Text(8, 40, "abc xyz {|} 0123456789 !@#$%^&*()", OSD_FG, OSD_BG);
-    Osd_Text(8, 52, " SELECTED ", OSD_SEL_FG, OSD_SEL_BG);
+    Osd_Frame(8, 8, VIDEO_WIDTH - 16, VIDEO_HEIGHT - 16, OSD_BORDER);
+    Osd_Text(88, 20, "A800 Supervisor", OSD_TITLE, OSD_CLEAR, OSD_FONT_TITLE);
+    Osd_Text(16, 44, "abc xyz {|} 0123456789 !@#$%^&*()", OSD_FG);
+    Osd_Text(16, 62, " Selected ", OSD_SEL_FG, OSD_SEL_BG);
+    Osd_Text(16, 80, "small 6x8 font", OSD_LABEL, OSD_CLEAR, OSD_FONT_SMALL);
     for (int i = 0; i < 6; i++) {
-      Osd_Rect(16 + i * 52, 96, 44, 40, OSD_TILE);
-      Osd_Icon(22 + i * 52, 104, (OsdIcon)i, OSD_FG, OSD_TILE);
+      Osd_Rect(16 + i * 52, 96, 44, 40, OSD_PANEL);
+      Osd_Icon(22 + i * 52, 100, (OsdIcon)i, 2);
     }
     Serial.printf("osd: heap after %u\n",
                   (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
