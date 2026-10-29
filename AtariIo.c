@@ -1,3 +1,5 @@
+/* Sector writes store into the disk image, which may live in PSRAM. */
+#define A800_PSRAM_STORES
 #include "AtariIo.h"
 #include "6502.h"
 #include "Pokey.h"
@@ -123,8 +125,35 @@ int AtariIo_LoadOs(Atari *a, const char *path) {
       os_page(a, page << 8);
   } else
     failed = -1;
+  Atari_InvalidateMemoryMap(a);
   free(data);
   return failed;
+}
+int AtariIo_LoadCartridge(Atari *a, const char *path) {
+  size_t size = 0;
+  uint8_t *data = load_alloc(path, &size);
+  if (!data)
+    return -1;
+  if (size >= 16 && !memcmp(data, "CART", 4)) {
+    uint32_t type = (uint32_t)data[4] << 24 | (uint32_t)data[5] << 16 |
+                    (uint32_t)data[6] << 8 | data[7];
+    size_t want = type == 1 ? 8192 : type == 2 ? 16384 : 0;
+    if (!want || size - 16 < want) {
+      free(data);
+      return want ? -1 : -2;
+    }
+    memmove(data, data + 16, want);
+    size = want;
+  }
+  if (size != 8192 && size != 16384) {
+    free(data);
+    return -1;
+  }
+  free(a->cart);
+  a->cart = data;
+  a->cart_size = (uint16_t)size;
+  Atari_InvalidateMemoryMap(a);
+  return 0;
 }
 int AtariIo_LoadDisk(Atari *a, const char *path) {
   FILE *f = fopen(path, "rb");
@@ -202,6 +231,11 @@ uint8_t AtariIo_Sio(Atari *a) {
 int Atari_LoadDisk(Atari *a, const char *path) {
   return AtariIo_LoadDisk(a, path);
 }
+void Atari_EjectDisk(Atari *a) {
+  free(a->disk);
+  a->disk = NULL;
+  a->disk_size = 0;
+}
 int Atari_Sector(Atari *a, unsigned s, uint8_t *d, int w) {
   return AtariIo_Sector(a, s, d, w);
 }
@@ -255,6 +289,7 @@ int Atari_LoadExecutableData(Atari *a, const uint8_t *data, size_t size) {
   a->ram[0x2e0] = a->ram[0x2e1] = a->ram[0x2e2] = a->ram[0x2e3] = 0;
   a->pia_ddr[1] = 0xff;
   a->pia[1] |= 0x83;
+  Atari_InvalidateMemoryMap(a);
   a->pia[3] |= 4;
   a->console |= 4;
   a->option_override = 64;

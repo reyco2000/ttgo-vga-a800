@@ -43,6 +43,7 @@ void Atari_SetVideoStandard(Atari *a, AtariVideoStandard standard) {
 #elif defined(NO_PAL)
   standard = A800_NTSC;
 #endif
+  Pokey_Flush(a);
   a->video_standard = standard;
   a->palette = Gtia_Palette(standard);
   if (standard == A800_PAL) {
@@ -73,7 +74,8 @@ void Atari_Reset(Atari *a) {
   memset(a->audio_phase, 0, sizeof(a->audio_phase));
   memset(a->audio_output, 0, sizeof(a->audio_output));
   memset(a->audio_hp, 0, sizeof(a->audio_hp));
-  a->audio_poly_phase = a->audio_previous = a->audio_filter = a->audio_sum = 0;
+  a->audio_poly_phase = a->audio_sum = a->audio_pending = 0;
+  a->audio_previous = a->audio_filter = 0;
   a->audio_poly4 = a->audio_poly5 = a->audio_poly9 = a->audio_poly17 = 1;
   a->audio_rate = a->audio_len = a->audio_clocks = 0;
   a->pokey_timer_base = a->pokey_random_cycle = 0;
@@ -85,16 +87,70 @@ void Atari_Reset(Atari *a) {
   a->cpu_cycle_debt = a->irq = a->nmi = 0;
   Cpu_Reset(a);
 }
-uint8_t Atari_Read(Atari *a, uint16_t p) {
+void Atari_WarmReset(Atari *a) {
+  a->antic[15] = (uint8_t)((a->antic[15] & 0x1f) | 0x20);
+  a->nmi = 1;
+}
+static int is_io(const Atari *a, uint16_t p) {
+  if (a->machine_type == A800_MACHINE_5200)
+    return (p >= 0xc000 && p < 0xd000) || (p >= 0xd400 && p < 0xd500) ||
+           (p >= 0xe800 && p < 0xf000);
+  return p >= 0xd000 && p < 0xd800;
+}
+static int os_page_mapped(const Atari *a, uint16_t p) {
+  return (a->os_pages[p >> 11] & (1u << ((p >> 8) & 7))) != 0;
+}
+/* Where reads of the (non-I/O) page holding p come from. */
+static const uint8_t *read_page(const Atari *a, uint16_t p) {
+#ifdef NO_BASIC
+  static const uint8_t zeros[256];
+#endif
   uint8_t portb = Atari_PortB(a);
-  if (a->machine_type == A800_MACHINE_5200) {
-    if (p >= 0xc000 && p < 0xd000)
-      return Gtia_Read(a, p);
-    if (p >= 0xd400 && p < 0xd500)
-      return Antic_Read(a, p);
-    if (p >= 0xe800 && p < 0xf000)
-      return Pokey_Read(a, p);
-  } else if (p >= 0xd000 && p < 0xd800) {
+  p &= 0xff00;
+  if (p < 0xc000 && p >= 0xc000 - a->cart_size)
+    return a->cart + (p - (0xc000 - a->cart_size));
+  if (p >= 0xc000 && os_page_mapped(a, p) &&
+      (a->machine_type != A800_MACHINE_XL || (portb & 1)))
+    return a->os + (p - 0xc000);
+  if (a->machine_type == A800_MACHINE_XL && p >= 0xa000 && p < 0xc000 &&
+      !(portb & 2))
+#ifndef NO_BASIC
+    return a->basic + (p - 0xa000);
+#else
+    return zeros;
+#endif
+  if (a->machine_type == A800_MACHINE_XL && p >= 0x5000 && p < 0x5800 &&
+      os_page_mapped(a, p) && (portb & 1) && !(portb & 0x80))
+    return a->os + (0x1000 + p - 0x5000);
+  return a->ram + p;
+}
+/* RAM the (non-I/O) page holding p writes to, or NULL when it is ROM. */
+static uint8_t *write_page(Atari *a, uint16_t p) {
+  uint8_t pb = Atari_PortB(a);
+  p &= 0xff00;
+  if (p < 0xc000 && p >= 0xc000 - a->cart_size)
+    return NULL;
+  if (p >= 0xc000 && os_page_mapped(a, p) &&
+      (a->machine_type != A800_MACHINE_XL || (pb & 1)))
+    return NULL;
+  if (a->machine_type == A800_MACHINE_XL && p >= 0xa000 && p < 0xc000 &&
+      !(pb & 2))
+    return NULL;
+  if (a->machine_type == A800_MACHINE_XL && p >= 0x5000 && p < 0x5800 &&
+      os_page_mapped(a, p) && (pb & 1) && !(pb & 0x80))
+    return NULL;
+  return a->ram + p;
+}
+void Atari_InvalidateMemoryMap(Atari *a) {
+  memset(a->read_map, 0, sizeof(a->read_map));
+  memset(a->write_map, 0, sizeof(a->write_map));
+}
+A800_HOT uint8_t Atari_Read(Atari *a, uint16_t p) {
+  if (is_io(a, p)) {
+    if (a->machine_type == A800_MACHINE_5200)
+      return p < 0xd000   ? Gtia_Read(a, p)
+             : p < 0xd500 ? Antic_Read(a, p)
+                          : Pokey_Read(a, p);
     switch ((p >> 8) & 7) {
     case 0:
       return Gtia_Read(a, p);
@@ -108,39 +164,21 @@ uint8_t Atari_Read(Atari *a, uint16_t p) {
       return 0xff;
     }
   }
-  if (p >= 0xc000 && (a->os_pages[p >> 11] & (1u << ((p >> 8) & 7))) &&
-      (a->machine_type != A800_MACHINE_XL || (portb & 1)))
-    return a->os[p - 0xc000];
-#ifndef NO_BASIC
-  if (a->machine_type == A800_MACHINE_XL && p >= 0xa000 && p < 0xc000 &&
-      !(portb & 2))
-    return a->basic[p - 0xa000];
-#else
-  if (a->machine_type == A800_MACHINE_XL && p >= 0xa000 && p < 0xc000 &&
-      !(portb & 2))
-    return 0;
-#endif
-  if (a->machine_type == A800_MACHINE_XL && p >= 0x5000 && p < 0x5800 &&
-      (a->os_pages[p >> 11] & (1u << ((p >> 8) & 7))) && (portb & 1) &&
-      !(portb & 0x80))
-    return a->os[0x1000 + p - 0x5000];
-  return a->ram[p];
+  const uint8_t *page = read_page(a, p);
+  a->read_map[p >> 8] = page;
+  return page[p & 255];
 }
-void Atari_Write(Atari *a, uint16_t p, uint8_t v) {
-  if (a->machine_type == A800_MACHINE_5200) {
-    if (p >= 0xc000 && p < 0xd000) {
-      Gtia_Write(a, p, v);
+A800_HOT void Atari_Write(Atari *a, uint16_t p, uint8_t v) {
+  if (is_io(a, p)) {
+    if (a->machine_type == A800_MACHINE_5200) {
+      if (p < 0xd000)
+        Gtia_Write(a, p, v);
+      else if (p < 0xd500)
+        Antic_Write(a, p, v);
+      else
+        Pokey_Write(a, p, v);
       return;
     }
-    if (p >= 0xd400 && p < 0xd500) {
-      Antic_Write(a, p, v);
-      return;
-    }
-    if (p >= 0xe800 && p < 0xf000) {
-      Pokey_Write(a, p, v);
-      return;
-    }
-  } else if (p >= 0xd000 && p < 0xd800) {
     switch ((p >> 8) & 7) {
     case 0:
       Gtia_Write(a, p, v);
@@ -157,20 +195,13 @@ void Atari_Write(Atari *a, uint16_t p, uint8_t v) {
     }
     return;
   }
-  uint8_t pb = Atari_PortB(a);
-  if (p >= 0xc000 && (a->os_pages[p >> 11] & (1u << ((p >> 8) & 7))) &&
-      (a->machine_type != A800_MACHINE_XL || (pb & 1)))
-    return;
-  if (a->machine_type == A800_MACHINE_XL && p >= 0xa000 && p < 0xc000 &&
-      !(pb & 2))
-    return;
-  if (a->machine_type == A800_MACHINE_XL && p >= 0x5000 && p < 0x5800 &&
-      (a->os_pages[p >> 11] & (1u << ((p >> 8) & 7))) && (pb & 1) &&
-      !(pb & 0x80))
-    return;
-  a->ram[p] = v;
+  uint8_t *page = write_page(a, p);
+  if (page) {
+    a->write_map[p >> 8] = page;
+    page[p & 255] = v;
+  }
 }
-void Atari_Frame(Atari *a) {
+A800_HOT void Atari_Frame(Atari *a) {
   Antic_BeginFrame(a);
   for (a->scanline = 0; a->scanline < a->frame_lines; a->scanline++) {
     a->line_cycles = 0;
@@ -188,7 +219,7 @@ void Atari_Frame(Atari *a) {
     while (a->line_cycles < cpu_limit) {
       int n = Cpu_Step(a);
       a->line_cycles += n;
-      Pokey_Advance(a, n);
+      Pokey_Clock(a, n);
     }
     unsigned cpu_used = (unsigned)(a->cycles - line_start);
     if (cpu_used > (unsigned)cpu_limit)
@@ -197,18 +228,28 @@ void Atari_Frame(Atari *a) {
     if (elapsed < 114) {
       unsigned idle = 114 - elapsed;
       a->cycles += idle;
-      Pokey_Advance(a, (int)idle);
+      Pokey_Clock(a, (int)idle);
     }
     Antic_CaptureLine(a);
-    memcpy(a->line_gtia[a->scanline], a->gtia, sizeof(a->gtia));
+    memcpy(a->line_gtia[A800_LINE(a->scanline)], a->gtia, sizeof(a->gtia));
     for (int i = 0; i < 4; i++)
-      a->line_colors[a->scanline][i] = a->gtia[22 + i];
-    a->line_colors[a->scanline][4] = a->gtia[26];
+      a->line_colors[A800_LINE(a->scanline)][i] = a->gtia[22 + i];
+    a->line_colors[A800_LINE(a->scanline)][4] = a->gtia[26];
     Antic_RenderLine(a, a->scanline);
   }
+  Pokey_Flush(a);
   Gtia_Frame(a);
 }
+void Atari_RemoveCartridge(Atari *a) {
+  free(a->cart);
+  a->cart = NULL;
+  a->cart_size = 0;
+  Atari_InvalidateMemoryMap(a);
+}
 void Atari_Destroy(Atari *a) {
+  free(a->cart);
+  a->cart = NULL;
+  a->cart_size = 0;
   free(a->disk);
   free(a->xex_data);
   a->disk = a->xex_data = NULL;

@@ -3,6 +3,8 @@
 #include "Atari.h"
 int AtariIo_LoadFile(const char *path, uint8_t *destination, size_t expected);
 int AtariIo_LoadOs(Atari *atari, const char *path);
+/* 0 inserted, -1 unreadable or wrong size, -2 unsupported .car type. */
+int AtariIo_LoadCartridge(Atari *a, const char *path);
 int AtariIo_LoadDisk(Atari *a, const char *path);
 int AtariIo_Sector(Atari *a, unsigned sector, uint8_t *data, int write);
 uint8_t AtariIo_Sio(Atari *a);

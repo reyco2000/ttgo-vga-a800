@@ -38,15 +38,127 @@ static void test_rom_xex(void) {
     Atari a = {0};
     assert(!AtariIo_LoadOs(&a, "core_test_os.xex"));
     assert(a.machine_type == cases[i].machine);
-    if (a.machine_type == A800_MACHINE_XL)
+    if (a.machine_type == A800_MACHINE_XL) {
       a.pia_ddr[1] = 0xff, a.pia[1] = 0x7f;
+      Atari_InvalidateMemoryMap(&a);
+    }
     assert(Atari_Read(&a, cases[i].address) == 0x5a);
   }
   assert(!remove("core_test_os.xex"));
 }
 
+static void write_file(const char *path, const uint8_t *d, size_t n) {
+  FILE *f = fopen(path, "wb");
+  assert(f && fwrite(d, 1, n, f) == n);
+  assert(!fclose(f));
+}
+static void write_car(const char *path, unsigned type, size_t n) {
+  uint8_t *d = (uint8_t *)calloc(1, 16 + n);
+  assert(d);
+  memcpy(d, "CART", 4);
+  d[7] = (uint8_t)type;
+  d[16] = 0x11;
+  d[16 + n - 1] = 0x22;
+  write_file(path, d, 16 + n);
+  free(d);
+}
+static void test_cartridges(void) {
+  static uint8_t img[16384];
+  Atari a;
+  memset(&a, 0, sizeof(a));
+  memset(a.trigger, 1, sizeof(a.trigger));
+  memset(a.trigger_latch, 1, sizeof(a.trigger_latch));
+  a.machine_type = A800_MACHINE_XL;
+  a.pia_ddr[1] = 0xff;
+  a.pia[1] = 0; /* BASIC on */
+  a.basic[0] = 0x77;
+  a.ram[0x9fff] = 0x99;
+  Atari_InvalidateMemoryMap(&a);
+  assert(Atari_Read(&a, 0xa000) == 0x77);
+  /* cart_8k_maps_a000, cart_beats_basic */
+  img[0] = 0x11;
+  img[0x1fff] = 0x22;
+  write_file("core_test_cart.rom", img, 8192);
+  assert(AtariIo_LoadCartridge(&a, "core_test_cart.rom") == 0);
+  assert(a.cart && a.cart_size == 8192);
+  assert(Atari_Read(&a, 0xa000) == 0x11);
+  assert(Atari_Read(&a, 0xbfff) == 0x22);
+  assert(Atari_Read(&a, 0x9fff) == 0x99);
+  /* cart_writes_ignored */
+  Atari_Write(&a, 0xa000, 0x55);
+  assert(Atari_Read(&a, 0xa000) == 0x11 && a.ram[0xa000] != 0x55);
+  /* cart_trig3_xl */
+  assert(Atari_Read(&a, 0xd013) & 1);
+  /* cart_survives_reset */
+  Atari_Reset(&a);
+  assert(Atari_Read(&a, 0xa000) == 0x11);
+  a.pia_ddr[1] = 0xff;
+  a.pia[1] = 0;
+  Atari_InvalidateMemoryMap(&a);
+  /* cart_failed_load_keeps_old */
+  write_file("core_test_bad.rom", img, 4000);
+  assert(AtariIo_LoadCartridge(&a, "core_test_bad.rom") == -1);
+  assert(AtariIo_LoadCartridge(&a, "core_test_missing.rom") == -1);
+  assert(a.cart_size == 8192 && Atari_Read(&a, 0xbfff) == 0x22);
+  /* cart_remove_restores */
+  Atari_RemoveCartridge(&a);
+  assert(!a.cart && a.cart_size == 0);
+  assert(Atari_Read(&a, 0xa000) == 0x77);
+  a.pia[1] = 2; /* BASIC off */
+  Atari_InvalidateMemoryMap(&a);
+  assert(Atari_Read(&a, 0xa000) == a.ram[0xa000]);
+  /* cart_16k_maps_8000 */
+  img[0x3fff] = 0x33;
+  write_file("core_test_cart.rom", img, 16384);
+  assert(AtariIo_LoadCartridge(&a, "core_test_cart.rom") == 0);
+  assert(a.cart_size == 16384);
+  assert(Atari_Read(&a, 0x8000) == 0x11);
+  assert(Atari_Read(&a, 0xbfff) == 0x33);
+  /* cart_car_types */
+  write_car("core_test_cart.car", 1, 8192);
+  assert(AtariIo_LoadCartridge(&a, "core_test_cart.car") == 0);
+  assert(a.cart_size == 8192 && Atari_Read(&a, 0xa000) == 0x11 &&
+         Atari_Read(&a, 0xbfff) == 0x22);
+  write_car("core_test_cart.car", 2, 16384);
+  assert(AtariIo_LoadCartridge(&a, "core_test_cart.car") == 0);
+  assert(a.cart_size == 16384 && Atari_Read(&a, 0x8000) == 0x11 &&
+         Atari_Read(&a, 0xbfff) == 0x22);
+  /* cart_rejects_unsupported */
+  write_car("core_test_cart.car", 12, 8192);
+  assert(AtariIo_LoadCartridge(&a, "core_test_cart.car") == -2);
+  write_car("core_test_cart.car", 2, 8192);
+  assert(AtariIo_LoadCartridge(&a, "core_test_cart.car") == -1);
+  assert(a.cart_size == 16384 && Atari_Read(&a, 0x8000) == 0x11);
+  Atari_Destroy(&a);
+  assert(!a.cart && a.cart_size == 0);
+  remove("core_test_cart.rom");
+  remove("core_test_cart.car");
+  remove("core_test_bad.rom");
+}
+static void test_disk_eject(void) {
+  static uint8_t atr[16 + 3 * 128];
+  Atari a;
+  memset(&a, 0, sizeof(a));
+  atr[0] = 0x96;
+  atr[1] = 0x02;
+  atr[4] = 128;
+  atr[16] = 0x5a;
+  write_file("core_test_disk.atr", atr, sizeof(atr));
+  assert(Atari_LoadDisk(&a, "core_test_disk.atr") == 0);
+  assert(a.disk && a.disk_size == sizeof(atr));
+  uint8_t sector[128];
+  assert(Atari_Sector(&a, 1, sector, 0) == 128 && sector[0] == 0x5a);
+  Atari_EjectDisk(&a);
+  assert(!a.disk && a.disk_size == 0);
+  assert(Atari_Sector(&a, 1, sector, 0) == -1);
+  Atari_EjectDisk(&a);
+  assert(!a.disk && a.disk_size == 0);
+  remove("core_test_disk.atr");
+}
 int main(void) {
   test_rom_xex();
+  test_cartridges();
+  test_disk_eject();
   Atari a;
   memset(&a, 0, sizeof(a));
   a.s = 0xfd;
@@ -121,6 +233,7 @@ int main(void) {
   a.pia_ddr[1] = 1;
   a.machine_type = A800_MACHINE_XL;
   a.os_pages[31] = 0x80;
+  Atari_InvalidateMemoryMap(&a);
   a.os[0x3ffc] = 0x34;
   a.os[0x3ffd] = 0x12;
   Cpu_Reset(&a);
@@ -217,7 +330,7 @@ int main(void) {
   Pokey_Audio(&a, ultrasonic, 4096, 44100);
   for (int i = 0; i < 4096; i++)
     assert(ultrasonic[i] <= 20000 && ultrasonic[i] >= -20000);
-  a.audio_phase[0] = .5;
+  a.audio_phase[0] = 0;
   a.audio_output[0] = 1;
   Pokey_Write(&a, 0xd209, 0);
   assert(a.audio_phase[0] > 0);
@@ -281,6 +394,7 @@ int main(void) {
   Atari_SetVideoStandard(&a, A800_NTSC);
   a.pia[1] = 0;
   a.pia_ddr[1] = 0xff;
+  Atari_InvalidateMemoryMap(&a);
   a.antic[0] = 0x22;
   a.antic[2] = 0x00;
   a.antic[3] = 0x02;
@@ -387,6 +501,7 @@ int main(void) {
   a.antic[0] = 0x22;
   a.pia_ddr[1] = 0xff;
   a.pia[1] = 0;
+  Atari_InvalidateMemoryMap(&a);
   a.ram[0x200] = 0x4f;
   a.ram[0x201] = 0xf0;
   a.ram[0x202] = 0xff;
@@ -403,6 +518,7 @@ int main(void) {
   Atari_SetVideoStandard(&a, A800_NTSC);
   a.pia[1] = 0;
   a.pia_ddr[1] = 0xff;
+  Atari_InvalidateMemoryMap(&a);
   a.antic[0] = 0x1a;
   a.antic[7] = 0x30;
   a.line_gtia[40][0] = 0x80;
@@ -428,6 +544,7 @@ int main(void) {
   Atari_SetVideoStandard(&a, A800_NTSC);
   a.pia[1] = 0;
   a.pia_ddr[1] = 0xff;
+  Atari_InvalidateMemoryMap(&a);
   a.antic[0] = 0x3e;
   a.antic[2] = 0;
   a.antic[3] = 2;
@@ -469,6 +586,7 @@ int main(void) {
   Atari_SetVideoStandard(&a, A800_NTSC);
   a.pia[1] = 0;
   a.pia_ddr[1] = 0xff;
+  Atari_InvalidateMemoryMap(&a);
   a.antic[0] = 0x22;
   a.antic[2] = 0;
   a.antic[3] = 2;
@@ -525,6 +643,7 @@ int main(void) {
   Atari_SetVideoStandard(&timed, A800_NTSC);
   timed.pia_ddr[1] = 0xff;
   timed.pia[1] = 0;
+  Atari_InvalidateMemoryMap(&timed);
   timed.pc = 0x200;
   timed.ram[0x200] = 0x4c;
   timed.ram[0x201] = 0;
@@ -557,5 +676,17 @@ int main(void) {
   assert(remove("core_test.state") == 0);
 #endif
   Atari_Destroy(&timed);
+  Atari warm;
+  memset(&warm, 0, sizeof(warm));
+  warm.antic[15] = 0xc0;
+  warm.ram[0x600] = 0x77;
+  warm.ram[0xfffa] = 0x34;
+  warm.ram[0xfffb] = 0x12;
+  Atari_WarmReset(&warm);
+  assert(warm.nmi == 1);
+  assert((Atari_Read(&warm, 0xd40f) & 0xe0) == 0x20);
+  assert(warm.ram[0x600] == 0x77);
+  Cpu_Step(&warm);
+  assert(warm.pc == 0x1234);
   return 0;
 }

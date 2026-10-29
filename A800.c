@@ -138,14 +138,7 @@ static void input(Atari *a, const SDL_Event *e, int down, int use_basic,
   if (c != 0xff) {
     if (e->key.keysym.mod & KMOD_CTRL)
       c |= 0x80;
-    a->keycode = c;
-    if (down) {
-      a->pokey_skstat &= ~4;
-      a->pokey_irqst &= ~0x40;
-      if (a->pokey_irqen & 0x40)
-        a->irq = 1;
-    } else
-      a->pokey_skstat |= 4;
+    Pokey_KeyEvent(a, c, down);
   }
 }
 int main(int argc, char **argv) {
