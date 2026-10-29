@@ -6,6 +6,7 @@
 #include "fabgl.h"
 #include "supervisor.h"
 #include "browser.h"
+#include "keymap.h"
 #include "osd.h"
 #include "../hal/hal.h"
 #include "../../config.h"
@@ -13,16 +14,16 @@ extern "C" {
 #include "../core/AtariIo.h"
 }
 
-enum Screen { SCR_MAIN, SCR_DISKS, SCR_CART, SCR_SETUP, SCR_ABOUT };
-enum Popup { POP_NONE, POP_RESET, POP_CONFIRM, POP_MESSAGE };
+enum Screen { SCR_MAIN, SCR_DISKS, SCR_CART, SCR_SETUP, SCR_KEYMAP, SCR_ABOUT };
+enum Popup { POP_NONE, POP_RESET, POP_CONFIRM, POP_MESSAGE, POP_CAPTURE };
 enum Action {
   ACT_NONE, ACT_CLOSE, ACT_OPEN_DISKS, ACT_OPEN_CART, ACT_ENTER_DIR,
   ACT_MOUNT, ACT_EJECT, ACT_CART, ACT_CART_REMOVE, ACT_WARM, ACT_COLD,
-  ACT_APPLY
+  ACT_APPLY, ACT_KEY_MAP, ACT_KEY_UNMAP, ACT_KEY_CLEAR_ALL
 };
 enum Nav {
   K_NONE, K_UP, K_DOWN, K_LEFT, K_RIGHT, K_ENTER, K_BACK, K_PARENT,
-  K_PGUP, K_PGDN, K_HOME, K_END
+  K_PGUP, K_PGDN, K_HOME, K_END, K_DEL
 };
 
 /* Screen layout: a header bar with a colour stripe under it, the body, and
@@ -32,7 +33,16 @@ enum { HEADER_H = 24, STRIPE_H = 2, FOOTER_Y = 222 };
 enum { LIST_X = 8, LIST_Y = 46, ROW_H = 16, LIST_ROWS = 10, LIST_COLS = 36 };
 enum { NAME_X = LIST_X + 18, BAR_X = VIDEO_WIDTH - 12, BAR_W = 4 };
 enum { TILE_W = 100, TILE_H = 84, TILE_GAP = 10, TILE_Y = 34 };
-enum { SETUP_ROWS = 6, TILES = 6 };
+enum { SETUP_ROWS = 6, SETUP_KEYMAP = 4, SETUP_APPLY = 5, TILES = 6 };
+/* Key mapper picture: caps KB_CAP_H tall every KB_PITCH, the 800XL's black
+ * caps on a dark case, the console keys silver-blue. */
+enum { KB_X = (VIDEO_WIDTH - KEYMAP_WIDTH) / 2, KB_Y = 38, KB_PITCH = 23, KB_CAP_H = 21 };
+enum { KB_INFO_Y = KB_Y + 5 * KB_PITCH + 10, KB_CONSOLE_X = 289 };
+enum {
+  KB_CASE = OSD_RGB(1, 1, 1), KB_CAP = OSD_RGB(0, 0, 0), KB_LIP = OSD_RGB(2, 2, 2),
+  KB_CONSOLE = OSD_RGB(2, 2, 3), KB_INK_DARK = OSD_RGB(0, 0, 1),
+  KB_INK_FIXED = OSD_RGB(1, 1, 2)
+};
 
 static const char *const disk_exts[] = {".atr", ".xex", NULL};
 static const char *const cart_exts[] = {".rom", ".car", NULL};
@@ -45,6 +55,8 @@ static struct {
   Screen screen;
   Popup popup;
   int tile, sel, top, pop_sel;
+  int key;                  /* Key mapper: selected Atari key */
+  uint16_t cap_sc, cap_vk;  /* PC key captured for it */
   Action pending, confirm;
   const char *message;
   Settings edit;            /* Setup's working copy */
@@ -113,6 +125,7 @@ static int nav(int vk) {
   case fabgl::VK_PAGEDOWN: case fabgl::VK_KP_PAGEDOWN: return K_PGDN;
   case fabgl::VK_HOME: case fabgl::VK_KP_HOME: return K_HOME;
   case fabgl::VK_END: case fabgl::VK_KP_END: return K_END;
+  case fabgl::VK_DELETE: case fabgl::VK_KP_DELETE: return K_DEL;
   default: return K_NONE;
   }
 }
@@ -305,11 +318,15 @@ static void draw_setup(void) {
   setup_row(1, "BASIC", sv.edit.basic ? "On" : "Off");
   setup_row(2, "Video", sv.edit.pal ? "PAL (untested)" : "NTSC");
   setup_row(3, "Keyboard", Settings_KbdName(sv.edit.kbd));
-  setup_row(4, "Mouse buttons", sv.edit.mouse_swap ? "R Fire, L START" : "L Fire, R START");
+  char mapped[16];
+  int n = Keymap_Mapped();
+  snprintf(mapped, sizeof mapped, n ? "%d key%s" : "None", n, n == 1 ? "" : "s");
+  setup_row(SETUP_KEYMAP, "Key mapper", mapped);
   /* Apply is a button under the options. */
   static const char apply_text[] = "Apply and restart";
-  bool on = sv.sel == 5;
-  int w = Osd_TextWidth(apply_text) + 24, x = (VIDEO_WIDTH - w) / 2, y = LIST_Y + 5 * 22 + 14;
+  bool on = sv.sel == SETUP_APPLY;
+  int w = Osd_TextWidth(apply_text) + 24, x = (VIDEO_WIDTH - w) / 2,
+      y = LIST_Y + SETUP_APPLY * 22 + 14;
   Osd_Rect(x + 3, y + 3, w, 22, OSD_SHADOW);
   Osd_Rect(x, y, w, 22, on ? OSD_RGB(0, 2, 0) : OSD_PANEL);
   if (on)
@@ -318,6 +335,86 @@ static void draw_setup(void) {
   center(y + 40, "The machine restarts with the new settings.", OSD_DIM,
          OSD_FONT_SMALL);
   draw_hints(hints, 4);
+}
+
+/* PC key name: FabGL's VirtualKey name without "VK_", or the scancode. */
+static const char *pc_key_name(const KeymapBinding *b) {
+  /* FabGL 1.0.9's name table stops at 222 entries, short of the enum: a
+   * later key (VK_TILDE_n, accented letters) would read past it. */
+  enum { VK_NAMES = 222 };
+  static char text[12];
+  const char *n = b->vk > fabgl::VK_NONE && b->vk < VK_NAMES
+                      ? fabgl::Keyboard::virtualKeyToString((fabgl::VirtualKey)b->vk)
+                      : NULL;
+  if (n && !strncmp(n, "VK_", 3))
+    return n + 3;
+  snprintf(text, sizeof text, "SC %s%02X", b->sc & 0x100 ? "E0 " : "", b->sc & 0xff);
+  return text;
+}
+
+/* Text centred in a cap. */
+static void cap_text(int x, int w, int y, const char *s, uint8_t ink, OsdFont font) {
+  Osd_Text(x + (w - Osd_TextWidth(s, font) + 1) / 2, y, s, ink, OSD_CLEAR, font);
+}
+
+/* One cap: black on the case, orange once mapped, the selection colour when
+ * selected; grey legends on the keys that cannot be mapped. */
+static void draw_cap(int i, bool on) {
+  const KeymapKey *k = &keymap_keys[i];
+  bool console = k->x >= KB_CONSOLE_X, mapped = Keymap_Get(i)->sc != 0;
+  uint8_t cap = on ? OSD_SEL_BG : mapped ? OSD_WARM : console ? KB_CONSOLE : KB_CAP;
+  uint8_t ink = on ? OSD_SEL_FG
+                : k->kind == KM_FIXED ? KB_INK_FIXED
+                : mapped || console ? KB_INK_DARK
+                                    : OSD_FG;
+  int x = KB_X + k->x, y = KB_Y + k->row * KB_PITCH;
+  Osd_Rect(x, y, k->w, KB_CAP_H, cap);
+  Osd_Rect(x, y, k->w, 1, on ? OSD_FG : KB_LIP);
+  if (on)
+    Osd_Frame(x, y, k->w, KB_CAP_H, OSD_FG);
+  if (k->shift) {
+    cap_text(x, k->w, y + 2, k->shift, ink, k->shift[1] ? OSD_FONT_TINY : OSD_FONT_SMALL);
+    cap_text(x, k->w, y + 11, k->label, ink, OSD_FONT_SMALL);
+  } else if (k->label[0] && !k->label[1]) {
+    cap_text(x, k->w, y + 4, k->label, ink, OSD_FONT_BODY);
+  } else if (k->label[0]) {
+    cap_text(x, k->w, y + 8, k->label, ink, OSD_FONT_TINY);
+  } else if (k->kind == KM_POKEY && k->code == 0x27) {
+    /* the Atari key: a square, half filled */
+    int gx = x + (k->w - 10) / 2, gy = y + 6;
+    Osd_Frame(gx, gy, 10, 10, ink);
+    for (int j = 0; j < 10; j++)
+      Osd_Rect(gx, gy + j, j + 1, 1, ink);
+  }
+}
+
+static void draw_keymap(void) {
+  static const Hint hints[] = {{"\x1b\x18\x19\x1a", "Move"}, {"Enter", "Map"},
+                               {"Del", "Unmap"}, {"C", "Clear"}, {"Esc", "Back"}};
+  char note[16], line[48];
+  snprintf(note, sizeof note, "%d MAPPED", Keymap_Mapped());
+  draw_frame("Key Mapper", note);
+  Osd_Rect(KB_X - 4, KB_Y - 4, KEYMAP_WIDTH + 8, 5 * KB_PITCH + 6, KB_CASE);
+  for (int i = 0; i < KEYMAP_COUNT; i++)
+    if (i != sv.key)
+      draw_cap(i, false);
+  draw_cap(sv.key, true); /* last, so its frame is not overdrawn */
+
+  const KeymapKey *k = &keymap_keys[sv.key];
+  const KeymapBinding *b = Keymap_Get(sv.key);
+  snprintf(line, sizeof line, "Atari %s", k->name);
+  Osd_Text(LIST_X + 8, KB_INFO_Y, line, OSD_LABEL);
+  if (k->kind == KM_FIXED) {
+    Osd_Text(LIST_X + 8, KB_INFO_Y + 17, "Cannot be mapped", OSD_ALERT);
+  } else if (b->sc) {
+    int x = Osd_Text(LIST_X + 8, KB_INFO_Y + 17, "PC key  ", OSD_DIM);
+    Osd_Text(x, KB_INFO_Y + 17, pc_key_name(b), OSD_VALUE);
+  } else {
+    Osd_Text(LIST_X + 8, KB_INFO_Y + 17, "Default PC keys", OSD_DIM);
+  }
+  Osd_Text(LIST_X + 8, KB_INFO_Y + 36, "Saved at once. SHIFT and CTRL still apply.",
+           OSD_DIM, OSD_CLEAR, OSD_FONT_SMALL);
+  draw_hints(hints, 5);
 }
 
 /* One "LABEL     value" line of the About screen. */
@@ -377,7 +474,7 @@ static void draw_popup(const char *title, uint8_t bar, const char *const *lines,
     if (Osd_TextWidth(lines[i]) > w)
       w = Osd_TextWidth(lines[i]);
   w += 32;
-  int h = 22 + 10 + nlines * 16 + 8 + BTN_H + 12;
+  int h = 22 + 10 + nlines * 16 + (n ? 8 + BTN_H : 0) + 12;
   int x = (VIDEO_WIDTH - w) / 2, y = (VIDEO_HEIGHT - h) / 2;
   Osd_Rect(x + 5, y + 5, w, h, OSD_SHADOW);
   Osd_Rect(x, y, w, h, OSD_PANEL);
@@ -402,20 +499,41 @@ static void draw(void) {
   case SCR_MAIN: draw_main(); break;
   case SCR_DISKS: case SCR_CART: draw_list(); break;
   case SCR_SETUP: draw_setup(); break;
+  case SCR_KEYMAP: draw_keymap(); break;
   case SCR_ABOUT: draw_about(); break;
   }
   static const char *const reset_buttons[] = {"No", "Warm", "Cold"};
   static const char *const confirm_buttons[] = {"No", "Yes"};
   static const char *const ok_button[] = {"OK"};
   static const char *const reset_lines[] = {"Reset the Atari?"};
-  char file[LIST_COLS + 1];
+  static const char *const capture_lines[] = {"Press the PC key for it.", "Esc cancels."};
+  char file[LIST_COLS + 1], title[40], map_line[40];
   const char *lines[2];
   switch (sv.popup) {
   case POP_NONE: break;
   case POP_RESET:
     draw_popup("Reset", OSD_RGB(2, 1, 0), reset_lines, 1, reset_buttons, 3);
     break;
+  case POP_CAPTURE:
+    snprintf(title, sizeof title, "Map Atari %s", keymap_keys[sv.key].name);
+    draw_popup(title, OSD_HEADER, capture_lines, 2, NULL, 0);
+    break;
   case POP_CONFIRM:
+    if (sv.confirm == ACT_KEY_MAP) {
+      KeymapBinding b = {sv.cap_sc, sv.cap_vk};
+      snprintf(map_line, sizeof map_line, "PC key %s types", pc_key_name(&b));
+      snprintf(title, sizeof title, "Atari %s?", keymap_keys[sv.key].name);
+      lines[0] = map_line;
+      lines[1] = title;
+      draw_popup("Map key", OSD_HEADER, lines, 2, confirm_buttons, 2);
+      break;
+    }
+    if (sv.confirm == ACT_KEY_CLEAR_ALL) {
+      lines[0] = "Clear every key mapping?";
+      lines[1] = "PC keys go back to default.";
+      draw_popup("Clear mappings", OSD_HEADER, lines, 2, confirm_buttons, 2);
+      break;
+    }
     if (sv.confirm == ACT_CART_REMOVE) {
       lines[0] = "Remove the cartridge?";
     } else {
@@ -532,10 +650,21 @@ static void apply(Action act) {
     s->basic = sv.edit.basic;
     s->pal = sv.edit.pal;
     s->kbd = sv.edit.kbd;
-    s->mouse_swap = sv.edit.mouse_swap;
     Settings_Save(s);
     Storage_End();
     esp_restart();
+    break;
+  case ACT_KEY_MAP:
+    Keymap_Set(sv.key, sv.cap_sc, sv.cap_vk);
+    Keymap_Save();
+    break;
+  case ACT_KEY_UNMAP:
+    Keymap_Clear(sv.key);
+    Keymap_Save();
+    break;
+  case ACT_KEY_CLEAR_ALL:
+    Keymap_ClearAll();
+    Keymap_Save();
     break;
   }
 }
@@ -673,12 +802,75 @@ static void setup_key(int k) {
   case 1: sv.edit.basic = !sv.edit.basic; break;
   case 2: sv.edit.pal = !sv.edit.pal; break;
   case 3: sv.edit.kbd = (KbdChoice)((sv.edit.kbd + KBD_COUNT + step) % KBD_COUNT); break;
-  case 4: sv.edit.mouse_swap = !sv.edit.mouse_swap; break;
-  case 5:
+  case SETUP_KEYMAP:
+    if (step > 0)
+      sv.screen = SCR_KEYMAP; /* sv.key stays where it was left */
+    break;
+  case SETUP_APPLY:
     if (k == K_ENTER)
       sv.pending = ACT_APPLY;
     break;
   }
+}
+
+/* Moves to the nearest cap in the row above or below, or to the next one
+ * left or right in the row; the console keys sit at the end of each row. */
+static void keymap_move(int dx, int dy) {
+  const KeymapKey *cur = &keymap_keys[sv.key];
+  int centre = cur->x + cur->w / 2, best = -1, best_dist = 0;
+  for (int i = 0; i < KEYMAP_COUNT; i++) {
+    const KeymapKey *k = &keymap_keys[i];
+    int kc = k->x + k->w / 2;
+    if (dy ? k->row != cur->row + dy : k->row != cur->row || (kc - centre) * dx <= 0)
+      continue;
+    int dist = abs(kc - centre);
+    if (best < 0 || dist < best_dist)
+      best = i, best_dist = dist;
+  }
+  if (best >= 0)
+    sv.key = best;
+}
+
+static void keymap_key(int k, uint8_t ascii) {
+  KeymapKind kind = keymap_keys[sv.key].kind;
+  switch (k) {
+  case K_UP: keymap_move(0, -1); return;
+  case K_DOWN: keymap_move(0, 1); return;
+  case K_LEFT: keymap_move(-1, 0); return;
+  case K_RIGHT: keymap_move(1, 0); return;
+  case K_BACK:
+    sv.screen = SCR_SETUP;
+    sv.sel = SETUP_KEYMAP;
+    return;
+  case K_ENTER:
+    if (kind != KM_FIXED)
+      sv.popup = POP_CAPTURE;
+    return;
+  case K_DEL:
+    if (Keymap_Get(sv.key)->sc)
+      sv.pending = ACT_KEY_UNMAP;
+    return;
+  }
+  if ((ascii == 'c' || ascii == 'C') && Keymap_Mapped())
+    ask(ACT_KEY_CLEAR_ALL);
+}
+
+/* The capture popup takes the next PC key, by scancode. SHIFT and CTRL
+ * stay modifiers, Esc cancels and F12 (handled before) closes the menu. */
+static void capture_key(int vk, uint16_t sc) {
+  switch (vk) {
+  case fabgl::VK_ESCAPE:
+    sv.popup = POP_NONE;
+    return;
+  case fabgl::VK_LSHIFT: case fabgl::VK_RSHIFT:
+  case fabgl::VK_LCTRL: case fabgl::VK_RCTRL:
+    return;
+  }
+  if (!sc)
+    return;
+  sv.cap_sc = sc;
+  sv.cap_vk = (uint16_t)vk;
+  ask(ACT_KEY_MAP);
 }
 
 /* --- public -------------------------------------------------------------- */
@@ -702,11 +894,16 @@ void Supervisor_Open(Atari *a, Settings *s) {
 
 bool Supervisor_Active(void) { return sv.active; }
 
-void Supervisor_Key(int vk, uint8_t ascii, bool down) {
+void Supervisor_Key(int vk, uint8_t ascii, uint16_t sc, bool down) {
   if (!sv.active || !down || sv.pending)
     return;
   if (vk == fabgl::VK_F12) {
     sv.pending = ACT_CLOSE;
+    return;
+  }
+  if (sv.popup == POP_CAPTURE) {
+    sv.dirty = true;
+    capture_key(vk, sc);
     return;
   }
   int k = nav(vk);
@@ -721,6 +918,7 @@ void Supervisor_Key(int vk, uint8_t ascii, bool down) {
   case SCR_MAIN: main_key(k); break;
   case SCR_DISKS: case SCR_CART: list_key(k, ascii); break;
   case SCR_SETUP: setup_key(k); break;
+  case SCR_KEYMAP: keymap_key(k, ascii); break;
   case SCR_ABOUT:
     if (k == K_BACK || k == K_ENTER)
       sv.screen = SCR_MAIN;

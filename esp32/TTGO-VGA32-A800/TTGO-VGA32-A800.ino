@@ -3,6 +3,7 @@
  * copies the shared core into src/core and sets the core build options. */
 #include "config.h"
 #include "src/hal/hal.h"
+#include "src/ui/keymap.h"
 #include "src/ui/osd.h"
 #include "src/ui/settings.h"
 #include "src/ui/supervisor.h"
@@ -271,6 +272,7 @@ void setup() {
     halt("cannot allocate the machine");
   }
   Settings_Load(&cfg);
+  Keymap_Load();
   if (!Storage_Init())
     halt("cannot mount microSD");
   boot_machine(&cfg); /* halts on failure; ends with Video_Init */
@@ -297,7 +299,6 @@ void setup() {
 #endif
   Keyboard_Init();
   Keyboard_SetLayout(cfg.kbd);
-  Keyboard_SetMouseSwap(cfg.mouse_swap);
   Pokey_Audio(atari, NULL, 0, AUDIO_RATE);
 #if BENCH_AT_BOOT
   run_bench();

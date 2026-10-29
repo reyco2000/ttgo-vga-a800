@@ -13,4 +13,5 @@ run() {  # run <name> <sources...>
 
 run browser_test src/ui/browser.cpp tests/browser_test.cpp
 run settings_test src/ui/settings.cpp tests/settings_test.cpp
+run keymap_test src/ui/keymap.cpp tests/keymap_test.cpp
 echo "ALL HOST TESTS PASSED"

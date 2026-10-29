@@ -1,13 +1,16 @@
 /* PS/2 keyboard through FabGL. Bindings follow the SDL frontend: arrows and
- * Alt are joystick 0, F2/F3/F4 are OPTION/SELECT/START, F5 resets and F8 is
- * BREAK, F12 opens the supervisor. A PS/2 mouse on port 1 is joystick 0 too:
- * moving it pushes the stick that way, the left button fires, the right is
- * START and the middle SELECT (left and right swap for a left hand). Typing uses FabGL's layout-translated ASCII, so the codes below are
+ * Alt are joystick 0, F2/F3/F4 are OPTION/SELECT/START (F11/F10 are SELECT
+ * and START too), F5 resets and F8 is BREAK, F12 opens the supervisor. A
+ * PS/2 mouse on port 1 is joystick 0 too: moving it pushes the stick that
+ * way and the left or right button fires. Typing uses FabGL's
+ * layout-translated ASCII, so the codes below are
  * the SDL frontend's US-layout codes indexed by character, whichever PS/2
- * layout Setup picked. */
+ * layout Setup picked. A PC key given an Atari key in the Key mapper
+ * (keymap.h) types that key instead of any of the above. */
 #include "fabgl.h"
 #include "hal.h"
 #include "../../config.h"
+#include "../ui/keymap.h"
 #include "../ui/settings.h"
 #include "../ui/supervisor.h"
 extern "C" {
@@ -22,8 +25,6 @@ static bool altgr; /* right Alt is AltGr, so only left Alt fires */
 static uint8_t kbd_stick = 0x0f, kbd_fire = 1;
 static uint8_t mouse_stick = 0x0f, mouse_fire = 1;
 static int mouse_x, mouse_y; /* stick deflection in mouse counts */
-static uint8_t mouse_console; /* console bits the mouse holds down */
-static bool mouse_swap;       /* left-handed: right fires, left is START */
 
 /* Layouts from the classic99 port. FabGL reads dead-key tables from the
  * active layout only, so each one leaves them empty: accents are typed
@@ -185,8 +186,40 @@ static void console_key(Atari *a, uint8_t bit, int down) {
     a->console |= bit;
 }
 
+static void press_break(Atari *a) {
+  a->pokey_irqst &= 0x7f;
+  if (a->pokey_irqen & 0x80)
+    a->irq = 1;
+}
+
+/* The Atari key the Key mapper gave this PC key; false when it has none. */
+static bool mapped_key(Atari *a, const fabgl::VirtualKeyItem &k) {
+  int i = Keymap_Find(Keymap_Scancode(k.scancode));
+  if (i < 0)
+    return false;
+  const KeymapKey *t = &keymap_keys[i];
+  switch (t->kind) {
+  case KM_POKEY:
+    Pokey_KeyEvent(a, (uint8_t)(t->code | (k.SHIFT ? 0x40 : 0) | (k.CTRL ? 0x80 : 0)),
+                   k.down);
+    break;
+  case KM_CONSOLE:
+    console_key(a, t->code, k.down);
+    break;
+  case KM_BREAK:
+    if (k.down)
+      press_break(a);
+    break;
+  case KM_FIXED:
+    break;
+  }
+  return true;
+}
+
 static int key_event(Atari *a, const fabgl::VirtualKeyItem &k) {
   uint8_t bit = 0;
+  if (mapped_key(a, k))
+    return KEY_ACTION_NONE;
   switch (k.vk) {
   case fabgl::VK_UP:
   case fabgl::VK_KP_UP:
@@ -215,19 +248,18 @@ static int key_event(Atari *a, const fabgl::VirtualKeyItem &k) {
     console_key(a, 4, k.down);
     return KEY_ACTION_NONE;
   case fabgl::VK_F3:
+  case fabgl::VK_F11:
     console_key(a, 2, k.down);
     return KEY_ACTION_NONE;
   case fabgl::VK_F4:
+  case fabgl::VK_F10:
     console_key(a, 1, k.down);
     return KEY_ACTION_NONE;
   case fabgl::VK_F5:
     return k.down ? KEY_ACTION_RESET : KEY_ACTION_NONE;
   case fabgl::VK_F8:
-    if (k.down) {
-      a->pokey_irqst &= 0x7f;
-      if (a->pokey_irqen & 0x80)
-        a->irq = 1;
-    }
+    if (k.down)
+      press_break(a);
     return KEY_ACTION_NONE;
   default:
     break;
@@ -265,16 +297,7 @@ static int spring(int v, int d) {
   return v - (v > 0 ? v + 3 : v - 3) / 4; /* rounds away from 0, reaches 0 */
 }
 
-/* Console keys change only on a button edge, like the F-keys, so the mouse
- * never releases what the keyboard or the boot OPTION hold pressed. */
-static void mouse_console_key(Atari *a, uint8_t bit, bool down) {
-  if (down == !!(mouse_console & bit))
-    return;
-  mouse_console ^= bit;
-  console_key(a, bit, down);
-}
-
-static void mouse_poll(Atari *a, bool active) {
+static void mouse_poll(bool active) {
   fabgl::Mouse *m = fabgl::PS2Controller::mouse();
   int dx = 0, dy = 0;
   bool fire = mouse_fire == 0;
@@ -282,13 +305,7 @@ static void mouse_poll(Atari *a, bool active) {
   while (m && m->deltaAvailable() && m->getNextDelta(&d, 0)) {
     dx += d.deltaX;
     dy += d.deltaY; /* positive is up */
-    bool primary = mouse_swap ? d.buttons.right : d.buttons.left;
-    bool secondary = mouse_swap ? d.buttons.left : d.buttons.right;
-    fire = primary;
-    if (active) { /* per packet, so a quick click is not lost */
-      mouse_console_key(a, 1, secondary);
-      mouse_console_key(a, 2, d.buttons.middle);
-    }
+    fire = d.buttons.left || d.buttons.right; /* either hand */
   }
   if (!active)
     return; /* drained for the menu; Keyboard_ReleaseAll centred the stick */
@@ -321,18 +338,16 @@ void Keyboard_SetLayout(uint8_t layout) {
     kbd->setLayout(layouts[layout]);
 }
 
-void Keyboard_SetMouseSwap(bool swap) { mouse_swap = swap; }
-
 /* F12 down stops the poll, so the keys after it reach the menu once it is
  * open. Its key-up is ignored. */
 int Keyboard_Poll(Atari *a) {
   fabgl::Keyboard *kbd = fabgl::PS2Controller::keyboard();
   int action = KEY_ACTION_NONE;
   fabgl::VirtualKeyItem k;
-  mouse_poll(a, !Supervisor_Active());
+  mouse_poll(!Supervisor_Active());
   while (kbd && kbd->virtualKeyAvailable() > 0 && kbd->getNextVirtualKey(&k, 0)) {
     if (Supervisor_Active())
-      Supervisor_Key(k.vk, (uint8_t)k.ASCII, k.down);
+      Supervisor_Key(k.vk, (uint8_t)k.ASCII, Keymap_Scancode(k.scancode), k.down);
     else if (k.vk == fabgl::VK_F12) {
       if (k.down) {
         update_stick(a);
@@ -352,7 +367,6 @@ void Keyboard_ReleaseAll(Atari *a) {
   kbd_stick = mouse_stick = 0x0f;
   kbd_fire = mouse_fire = 1;
   mouse_x = mouse_y = 0;
-  mouse_console = 0;
   a->joystick = 0xff;
   a->trigger[0] = 1;
   a->console = 7;

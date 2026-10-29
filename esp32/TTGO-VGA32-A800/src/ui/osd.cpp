@@ -9,7 +9,7 @@
 #define PIXEL(row, x) (row)[(x) ^ 2]
 
 static const fabgl::FontInfo *const fonts[] = {
-    &fabgl::FONT_8x14, &fabgl::FONT_SANSERIF_8x16, &fabgl::FONT_6x8};
+    &fabgl::FONT_8x14, &fabgl::FONT_SANSERIF_8x16, &fabgl::FONT_6x8, &fabgl::FONT_4x6};
 
 void Osd_Begin(void) {}
 

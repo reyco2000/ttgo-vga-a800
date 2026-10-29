@@ -17,7 +17,8 @@ enum OsdIcon {
 enum OsdFont {
   OSD_FONT_BODY,  /* VGA 8x14 */
   OSD_FONT_TITLE, /* sans serif 8x16, bold */
-  OSD_FONT_SMALL  /* 6x8 */
+  OSD_FONT_SMALL, /* 6x8 */
+  OSD_FONT_TINY   /* 4x6, key cap legends */
 };
 
 enum {

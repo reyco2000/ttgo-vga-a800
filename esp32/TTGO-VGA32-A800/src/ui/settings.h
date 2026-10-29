@@ -12,7 +12,6 @@ struct Settings {
   bool basic;
   bool pal;
   KbdChoice kbd;
-  bool mouse_swap; /* left-handed: right button fires, left is START */
   char disk[128]; /* full /sd/... path or "" */
   char cart[128]; /* full /sd/... path or "" */
 };

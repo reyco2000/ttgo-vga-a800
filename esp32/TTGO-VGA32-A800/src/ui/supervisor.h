@@ -1,6 +1,6 @@
 /* F12 supervisor menu: tile main menu, disk and cartridge browsers, reset,
- * setup and about screens, drawn over the paused emulator with Osd_*. All
- * calls come from the emulation task (core 0). */
+ * setup (with its key mapper) and about screens, drawn over the paused
+ * emulator with Osd_*. All calls come from the emulation task (core 0). */
 #ifndef A800_ESP32_SUPERVISOR_H
 #define A800_ESP32_SUPERVISOR_H
 #include <stdint.h>
@@ -13,9 +13,9 @@ extern "C" {
  * running configuration; the menu edits and saves it. */
 void Supervisor_Open(Atari *a, Settings *s);
 bool Supervisor_Active(void);
-/* vk is a fabgl::VirtualKey; Keyboard_Poll forwards every event here
- * while the menu is open. */
-void Supervisor_Key(int vk, uint8_t ascii, bool down);
+/* vk is a fabgl::VirtualKey and sc its Keymap_Scancode; Keyboard_Poll
+ * forwards every event here while the menu is open. */
+void Supervisor_Key(int vk, uint8_t ascii, uint16_t sc, bool down);
 /* Applies pending actions and redraws when needed. */
 void Supervisor_Update(void);
 
